@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+debug.log
+video_outputs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
