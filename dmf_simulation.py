@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import heapq
 import math
 import random
 from typing import Iterable, Optional
 
 import numpy as np
+
+from simulation.metrics import OperationMetrics, StepEvent
+from simulation.profiles import MotionProfile, VisionNoiseProfile
 
 try:
     import cv2
@@ -88,89 +91,6 @@ RESERVOIR_CONNECTIONS = {
 
 Cell = tuple[int, int]
 GridPosition = tuple[float, float]
-
-
-@dataclass(frozen=True)
-class MotionProfile:
-    name: str = "ideal"
-    response_delay_s: float = 0.0
-    speed_scale: float = 1.0
-    position_jitter_cells: float = 0.0
-    stuck_probability: float = 0.0
-    overshoot_probability: float = 0.0
-    split_failure_probability: float = 0.0
-
-
-@dataclass(frozen=True)
-class VisionNoiseProfile:
-    name: str = "off"
-    drop_frame_rate: float = 0.0
-    jitter_cells: float = 0.0
-    false_detection_rate: float = 0.0
-    low_contrast: float = 0.0
-
-
-@dataclass(frozen=True)
-class StepEvent:
-    stage: str
-    target_cell: Optional[Cell] = None
-    detected_cell: Optional[Cell] = None
-    on_cells: tuple[Cell, ...] = ()
-    off_cells: tuple[Cell, ...] = ()
-    duration_s: float = 0.0
-    action: str = ""
-
-
-@dataclass
-class OperationMetrics:
-    operation: str
-    success: bool = False
-    events: list[StepEvent] = field(default_factory=list)
-    replan_count: int = 0
-    dropout_count: int = 0
-    stall_count: int = 0
-    split_failure_count: int = 0
-    electrode_switch_count: int = 0
-
-    def record_event(self, event: StepEvent) -> None:
-        self.events.append(event)
-        self.electrode_switch_count += len(event.on_cells) + len(event.off_cells)
-
-    def record_replan(self) -> None:
-        self.replan_count += 1
-
-    def record_dropout(self) -> None:
-        self.dropout_count += 1
-
-    def record_stall(self) -> None:
-        self.stall_count += 1
-
-    def record_split_failure(self) -> None:
-        self.split_failure_count += 1
-
-    @property
-    def total_steps(self) -> int:
-        return len(self.events)
-
-    @property
-    def average_step_time_s(self) -> float:
-        timed = [event.duration_s for event in self.events if event.duration_s > 0]
-        if not timed:
-            return 0.0
-        return sum(timed) / len(timed)
-
-    def to_csv_row(self) -> dict[str, object]:
-        return {
-            "operation": self.operation,
-            "success": int(self.success),
-            "total_steps": self.total_steps,
-            "average_step_time_s": round(self.average_step_time_s, 4),
-            "replan_count": self.replan_count,
-            "dropout_count": self.dropout_count,
-            "stall_count": self.stall_count,
-            "split_failure_count": self.split_failure_count,
-            "electrode_switch_count": self.electrode_switch_count,
-        }
 
 
 def electrode_id(row: int, col: int, cols: int = GRID_COLS, rows: int = GRID_ROWS) -> int:
