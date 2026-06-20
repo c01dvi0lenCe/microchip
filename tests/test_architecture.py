@@ -27,8 +27,8 @@ class ArchitectureTests(unittest.TestCase):
 
         self.assertEqual(HardwareProtocol.set_electrode(23, True), "SET:23:1")
         self.assertEqual(HardwareProtocol.set_electrode(23, False), "SET:23:0")
-        self.assertEqual(HardwareProtocol.set_frequency(5000), "FREQ:5000")
-        self.assertEqual(HardwareProtocol.query_frequency(), "FREQ?")
+        self.assertFalse(hasattr(HardwareProtocol, "set_frequency"))
+        self.assertFalse(hasattr(HardwareProtocol, "query_frequency"))
 
 
 if __name__ == "__main__":

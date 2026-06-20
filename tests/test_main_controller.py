@@ -35,6 +35,13 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn(self.app.TOOL_OBSTACLE, self.app._tool_options_for_operation())
         self.assertNotIn(self.app.TOOL_MANUAL, self.app._tool_options_for_operation())
 
+    def test_scan_frequency_is_not_configured_by_upper_computer(self):
+        self.assertFalse(hasattr(self.app, "freq_combobox"))
+        self.assertFalse(hasattr(self.app, "btn_apply_freq"))
+        self.assertFalse(hasattr(self.app, "freq_status_label"))
+        self.assertFalse(hasattr(self.app, "apply_scan_freq"))
+        self.assertFalse(hasattr(self.app, "query_scan_freq"))
+
     def test_multi_planner_can_use_initial_core_droplets_without_reservoirs(self):
         self.app.operation_var.set(self.app.OP_MULTI)
         self.app._update_tool_options()

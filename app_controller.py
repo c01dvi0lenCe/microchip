@@ -85,10 +85,6 @@ class STM32MatrixController:
         self.cols = GRID_COLS
         self.pitch_mm = ELECTRODE_PITCH_MM
         self.total_channels = len(LAYOUT_CELLS)
-        self.freq_options_hz = [1000, 5000, 10000, 20000]
-        self.freq_option_labels = ["1kHz", "5kHz", "10kHz", "20kHz"]
-        self.current_freq_hz = 5000
-        self.pending_freq_hz = None
 
         self.ser = None
         self.is_connected = False
@@ -410,18 +406,6 @@ class STM32MatrixController:
         self.btn_connect = self._make_button(row, "打开串口", self.toggle_connection, self.colors["accent"], "white")
         self.btn_connect.pack(side="left", padx=(8, 0))
 
-        tk.Frame(row, width=20, bg=self.colors["panel"]).pack(side="left")
-
-        tk.Label(row, text="扫描频率", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
-        self.freq_combobox = ttk.Combobox(row, width=10, state="readonly")
-        self.freq_combobox["values"] = self.freq_option_labels
-        self.freq_combobox.current(1)
-        self.freq_combobox.pack(side="left", padx=(6, 6))
-        self.freq_combobox.bind("<<ComboboxSelected>>", self.on_freq_selected)
-
-        self.btn_apply_freq = self._make_button(row, "应用", self.apply_scan_freq, self.colors["accent"], "white")
-        self.btn_apply_freq.pack(side="left")
-
         self.btn_reset = self._make_button(row, "全部关闭", self.reset_all, self.colors["danger"], "white")
         self.btn_reset.config(activebackground=self.colors["danger_hover"])
         self.btn_reset.pack(side="right")
@@ -434,15 +418,6 @@ class STM32MatrixController:
             font=(self.font_family, 9, "bold"),
         )
         self.active_count_label.pack(side="right", padx=(0, 10))
-
-        self.freq_status_label = tk.Label(
-            row,
-            text="当前: 5kHz",
-            bg=self.colors["panel"],
-            fg=self.colors["muted"],
-            font=(self.font_family, 9, "bold"),
-        )
-        self.freq_status_label.pack(side="right", padx=(0, 16))
 
     def _build_auto_control_card(self, parent):
         card = tk.Frame(parent, bg=self.colors["panel"], bd=1, relief="solid")
@@ -1522,64 +1497,6 @@ class STM32MatrixController:
                 self.ser.close()
             self._set_connection_state(False)
             self.log("串口已断开")
-
-    def apply_scan_freq(self):
-        selected_label = self.freq_combobox.get().strip()
-        if selected_label not in self.freq_option_labels:
-            self.log(f"频率选项无效: {selected_label}")
-            return
-
-        freq_hz = self.freq_options_hz[self.freq_option_labels.index(selected_label)]
-        if self.is_simulation_mode():
-            self._set_freq_status_hz(freq_hz)
-            self.log(f"仿真扫描频率 -> {selected_label}")
-            return
-
-        if not self.is_connected:
-            messagebox.showwarning("提示", "请先连接串口")
-            return
-
-        self.pending_freq_hz = freq_hz
-        self.send_command(HardwareProtocol.set_frequency(freq_hz))
-        self.freq_status_label.config(text=f"当前: 切换中({selected_label})")
-        self.log(f"请求切换频率 -> {selected_label}")
-        self.root.after(200, self.query_scan_freq)
-        self.root.after(1500, self._check_freq_ack_timeout)
-
-    def on_freq_selected(self, _event=None):
-        selected_label = self.freq_combobox.get().strip()
-        if not selected_label:
-            return
-        if self.is_simulation_mode():
-            self.freq_status_label.config(text=f"待应用: {selected_label}")
-            return
-        if not self.is_connected:
-            self.freq_status_label.config(text=f"待应用: {selected_label}")
-            return
-        self.apply_scan_freq()
-
-    def query_scan_freq(self):
-        if self.is_connected:
-            self.send_command(HardwareProtocol.query_frequency())
-
-    def _check_freq_ack_timeout(self):
-        if self.pending_freq_hz is not None:
-            pending_label = self._freq_hz_to_label(self.pending_freq_hz)
-            self.log(f"频率切换未确认，仍可能是旧频率 ({pending_label})")
-            self.freq_status_label.config(text=f"当前: 未确认({pending_label})")
-            self.pending_freq_hz = None
-
-    def _freq_hz_to_label(self, freq_hz):
-        if freq_hz >= 1000 and (freq_hz % 1000) == 0:
-            return f"{freq_hz // 1000}kHz"
-        return f"{freq_hz}Hz"
-
-    def _set_freq_status_hz(self, freq_hz):
-        label = self._freq_hz_to_label(freq_hz)
-        self.current_freq_hz = freq_hz
-        self.freq_status_label.config(text=f"当前: {label}")
-        if freq_hz in self.freq_options_hz:
-            self.freq_combobox.current(self.freq_options_hz.index(freq_hz))
 
     def send_command(self, command, log_send=True):
         if self.is_simulation_mode():
@@ -4512,18 +4429,6 @@ class STM32MatrixController:
                                         self.root.after(0, self.update_ui_only, p_id, p_state)
                                     except ValueError:
                                         self.root.after(0, self.log, f"同步数据格式错误: {line}")
-                            elif "OK: FREQ" in line:
-                                try:
-                                    tail = line.split("OK: FREQ", 1)[1].strip()
-                                    freq_hz = int(tail.split()[0])
-                                    self.root.after(0, self._set_freq_status_hz, freq_hz)
-                                    self.pending_freq_hz = None
-                                except (TypeError, ValueError):
-                                    pass
-                                self.root.after(0, self.log, f"收到 <- {line}")
-                            elif "ERR: FREQ" in line:
-                                self.pending_freq_hz = None
-                                self.root.after(0, self.log, f"收到 <- {line}")
                             else:
                                 self.root.after(0, self.log, f"收到 <- {line}")
                 except Exception as exc:

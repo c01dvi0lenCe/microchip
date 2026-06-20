@@ -9,14 +9,6 @@ class HardwareProtocol:
         return f"SET:{electrode_id}:{1 if state else 0}"
 
     @staticmethod
-    def set_frequency(freq_hz: int) -> str:
-        return f"FREQ:{int(freq_hz)}"
-
-    @staticmethod
-    def query_frequency() -> str:
-        return "FREQ?"
-
-    @staticmethod
     def camera_start() -> str:
         return "CAMERA:START"
 
