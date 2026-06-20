@@ -4,6 +4,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from dmf_simulation import MultiDropletAssignment, SimulatedDroplet, StepEvent, electrode_id
 from main import STM32MatrixController
@@ -46,6 +47,17 @@ class MainControllerLayoutTests(unittest.TestCase):
             x0, y0, x1, y1 = canvas.bbox(item)
             sizes.append((x1 - x0, y1 - y0))
         return sizes
+
+    def _click_cell(self, cell, shift=False):
+        original = self.app._canvas_to_cell
+        self.app._canvas_to_cell = lambda _x, _y: cell
+        try:
+            self.app.on_matrix_click(
+                SimpleNamespace(widget=self.app.path_canvas, x=0, y=0, state=0x0001 if shift else 0),
+                manual=False,
+            )
+        finally:
+            self.app._canvas_to_cell = original
 
     def test_main_notebook_defaults_to_manual_electrode_page(self):
         tabs = [self.app.main_notebook.tab(tab_id, "text") for tab_id in self.app.main_notebook.tabs()]
@@ -91,6 +103,28 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn("液滴", labels)
         self.assertNotIn("液滴A", labels)
         self.assertNotIn("液滴B", labels)
+
+    def test_target_electrode_click_toggles_placement(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.on_operation_changed()
+        self.app.tool_var.set(self.app.TOOL_MULTI_SHAPE)
+
+        self._click_cell((4, 4))
+        self._click_cell((4, 4))
+
+        self.assertEqual(self.app.target_shape_points, [])
+        self.assertEqual(self.app.target_shape_cells, [])
+
+    def test_loop_droplet_click_toggles_placement_without_shift(self):
+        self.app.operation_var.set(self.app.OP_LOOP)
+        self.app.on_operation_changed()
+        self.app.tool_var.set(self.app.TOOL_LOOP_START)
+
+        self._click_cell((2, 2))
+        self._click_cell((2, 2))
+
+        self.assertEqual(self.app.loop_routes, [])
+        self.assertIsNone(self.app.loop_route_index)
 
     def test_single_droplet_operations_use_generic_droplet_legend(self):
         for operation in (self.app.OP_MOVE, self.app.OP_SPLIT, self.app.OP_LOOP):

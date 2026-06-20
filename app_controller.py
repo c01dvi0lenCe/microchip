@@ -2234,6 +2234,8 @@ class STM32MatrixController:
                 self.log(f"初始液滴已添加 -> {self._cell_label(cell)}")
             self._reset_droplets_for_operation()
         elif tool == self.TOOL_LOOP_START:
+            if self._toggle_existing_loop_droplet(cell):
+                return
             if not self._is_core_array_cell(cell):
                 self.log("设置循环液滴时请点击中间 20x20 阵列")
                 return
@@ -2287,6 +2289,8 @@ class STM32MatrixController:
             current_index = (self.loop_route_index or 0) + 1
             self.log(f"循环液滴 D{current_index} 路径点 {len(self.loop_path_points)} -> {self._cell_label(cell)}")
         elif tool == self.TOOL_MULTI_SHAPE:
+            if self._toggle_existing_target_shape_cell(cell):
+                return
             row, col = cell
             if is_reservoir_cell(cell) or not (0 <= row < self.rows and 0 <= col < self.cols):
                 self.log("设置目标电极时请点击中间 20x20 阵列")
@@ -2472,6 +2476,22 @@ class STM32MatrixController:
             self._reset_droplets_for_operation()
             return True
         return False
+
+    def _toggle_existing_loop_droplet(self, cell):
+        if not self._is_core_array_cell(cell):
+            return False
+        if not any(route["source"] == cell for route in self.loop_routes):
+            return False
+        self._push_undo_snapshot()
+        self._clear_planned_operation()
+        removed = self._remove_loop_droplet(cell)
+        if removed:
+            self.log(f"循环液滴已取消 -> {self._cell_label(cell)}")
+        self._update_cell_status(cell)
+        self._draw_matrix_canvas()
+        if self.is_simulation_mode():
+            self._render_sim_camera_frame()
+        return removed
 
     def _select_loop_droplet(self, cell):
         if not self._is_core_array_cell(cell):
@@ -3356,6 +3376,21 @@ class STM32MatrixController:
             cells.append(cell)
             seen.add(cell)
         self.target_shape_cells = cells
+
+    def _toggle_existing_target_shape_cell(self, cell):
+        if cell not in self.target_shape_cells:
+            return False
+        self._push_undo_snapshot()
+        self._clear_planned_operation()
+        self.target_shape_points = [point for point in self.target_shape_points if point != cell]
+        self._rebuild_target_shape_cells()
+        self._reset_droplets_for_operation()
+        self.log(f"目标电极已取消 -> {self._cell_label(cell)}")
+        self._update_cell_status(cell)
+        self._draw_matrix_canvas()
+        if self.is_simulation_mode():
+            self._render_sim_camera_frame()
+        return True
 
     def undo_target_shape(self):
         if self.auto_running:
