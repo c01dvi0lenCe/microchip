@@ -1199,6 +1199,21 @@ class STM32MatrixController:
             for idx, _droplet in enumerate(self.sim_droplets)
         ]
 
+    def _display_droplet_shapes(self, manual_view=False):
+        positions = self._manual_droplet_positions() if manual_view else self._display_droplet_positions()
+        operation = self.operation_var.get()
+        if not positions:
+            return []
+        if operation == self.OP_MERGE and (self.mixing_active or self.mixing_index > 0):
+            return ["horizontal_ellipse"] * len(positions)
+        if (
+            operation == self.OP_SPLIT
+            and len(self.sim_droplets) >= 2
+            and self.split_progress >= 0.55
+        ):
+            return ["horizontal_ellipse"] * len(positions)
+        return ["circle"] * len(positions)
+
     def _display_droplet_positions(self):
         positions = self._droplet_positions()
         if self.operation_var.get() == self.OP_MULTI and not positions and not self.multi_assignments:
@@ -1331,6 +1346,7 @@ class STM32MatrixController:
                     self._hex_to_rgb(self.multi_droplet_colors[idx % len(self.multi_droplet_colors)])
                     for idx, _position in enumerate(positions)
                 ],
+                "droplet_shapes": self._display_droplet_shapes(manual_view=True),
             }
 
         operation = self.operation_var.get()
@@ -1356,6 +1372,7 @@ class STM32MatrixController:
             "hide_droplet": False,
             "droplet_positions": visible_positions,
             "droplet_colors": self._camera_droplet_colors(),
+            "droplet_shapes": self._display_droplet_shapes(manual_view=False),
         }
 
     def _show_setup_markers(self):
@@ -2003,9 +2020,11 @@ class STM32MatrixController:
                 self._draw_position_marker(droplet.position, color, radius_scale=0.34)
                 self._draw_position_text(droplet.position, str(idx), fill="white")
         else:
+            droplet_shapes = self._display_droplet_shapes(manual_view=False)
             for idx, droplet in enumerate(self.sim_droplets):
                 color = self._droplet_marker_colors()[idx % 2]
-                self._draw_position_marker(droplet.position, color, radius_scale=0.34)
+                shape = droplet_shapes[idx] if idx < len(droplet_shapes) else "circle"
+                self._draw_position_marker(droplet.position, color, radius_scale=0.34, shape=shape)
                 if operation in (self.OP_MERGE, self.OP_SPLIT) and len(self.sim_droplets) > 1:
                     self._draw_position_text(droplet.position, "A" if idx == 0 else "B", fill="white")
         for detected_position in self.detected_positions:
@@ -2116,14 +2135,20 @@ class STM32MatrixController:
     def _draw_reservoir_connector(self, cell):
         return
 
-    def _draw_position_marker(self, position, color, radius_scale=0.3, hollow=False):
+    def _draw_position_marker(self, position, color, radius_scale=0.3, hollow=False, shape="circle"):
         row, col = position
         left, top, _, _, cell_size = self._grid_geometry()
         cx = left + (col + 0.5) * cell_size
         cy = top + (row + 0.5) * cell_size
         radius = max(4, cell_size * radius_scale)
         fill = "" if hollow else color
-        self.matrix_canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, fill=fill, outline=color, width=3)
+        if shape == "horizontal_ellipse":
+            rx = max(radius, cell_size * 0.48)
+            ry = max(3, cell_size * 0.27)
+        else:
+            rx = radius
+            ry = radius
+        self.matrix_canvas.create_oval(cx - rx, cy - ry, cx + rx, cy + ry, fill=fill, outline=color, width=3)
 
     def _draw_position_text(self, position, text, fill="#1F2A33"):
         row, col = position

@@ -164,6 +164,20 @@ class DmfSimulationTests(unittest.TestCase):
 
         self.assertEqual(cells, {(5, 7)})
 
+    def test_detector_accepts_horizontal_ellipse_droplet(self):
+        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
+        detector = DropletDetector(camera)
+        frame = camera.render(
+            (5.0, 7.0),
+            active_cells={(5, 7)},
+            droplet_shapes=["horizontal_ellipse"],
+        )
+
+        detections = detector.detect_all(frame)
+        cells = {detection.cell for detection in detections}
+
+        self.assertEqual(cells, {(5, 7)})
+
     def test_detector_returns_all_multi_droplet_palette_colors(self):
         camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
         detector = DropletDetector(camera)

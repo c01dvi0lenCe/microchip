@@ -34,7 +34,7 @@ DROPLET_DETECTION_RGB = (
     (47, 95, 154),
     (125, 79, 42),
 )
-DROPLET_DETECTION_TOLERANCE = 82
+DROPLET_DETECTION_TOLERANCE = 30
 
 SIDE_RESERVOIR_COLS = (6, 13)
 SIDE_RESERVOIR_ROWS = (6, 13)
@@ -571,6 +571,7 @@ class SimulatedCamera:
         hide_droplet: bool = False,
         droplet_positions: Optional[Iterable[GridPosition]] = None,
         droplet_colors: Optional[Iterable[tuple[int, int, int]]] = None,
+        droplet_shapes: Optional[Iterable[str]] = None,
         noise_profile: Optional[VisionNoiseProfile] = None,
     ) -> np.ndarray:
         width, height = self.frame_size
@@ -622,8 +623,11 @@ class SimulatedCamera:
         if not hide_droplet:
             positions = list(droplet_positions) if droplet_positions is not None else [droplet_position]
             colors = list(droplet_colors) if droplet_colors is not None else [(24, 82, 194)]
+            shapes = list(droplet_shapes) if droplet_shapes is not None else ["circle"]
             if not colors:
                 colors = [(24, 82, 194)]
+            if not shapes:
+                shapes = ["circle"]
             radius = max(6, int(round(cell_size * 0.36)))
             for idx, pos in enumerate(positions):
                 row, col = pos
@@ -636,11 +640,26 @@ class SimulatedCamera:
                     color = tuple(int(channel * (1.0 - mix) + 245 * mix) for channel in color)
                 outline = tuple(max(0, int(channel * 0.45)) for channel in color)
                 center = self.grid_position_to_pixel((row, col))
+                shape = shapes[idx % len(shapes)]
                 if cv2 is not None:
-                    cv2.circle(frame, center, radius, color, -1)
-                    cv2.circle(frame, center, radius, outline, 2)
+                    if shape == "horizontal_ellipse":
+                        axes = (max(radius, int(round(cell_size * 0.48))), max(4, int(round(cell_size * 0.27))))
+                        cv2.ellipse(frame, center, axes, 0, 0, 360, color, -1)
+                        cv2.ellipse(frame, center, axes, 0, 0, 360, outline, 2)
+                    else:
+                        cv2.circle(frame, center, radius, color, -1)
+                        cv2.circle(frame, center, radius, outline, 2)
                 else:
-                    self._draw_circle(frame, center, radius, color)
+                    if shape == "horizontal_ellipse":
+                        self._draw_ellipse(
+                            frame,
+                            center,
+                            max(radius, int(round(cell_size * 0.48))),
+                            max(4, int(round(cell_size * 0.27))),
+                            color,
+                        )
+                    else:
+                        self._draw_circle(frame, center, radius, color)
             if profile.false_detection_rate >= 1.0 or (
                 profile.false_detection_rate > 0.0 and random.random() < profile.false_detection_rate
             ):
@@ -833,6 +852,18 @@ class SimulatedCamera:
         mask = (xx - center[0]) ** 2 + (yy - center[1]) ** 2 <= radius**2
         frame[mask] = color
 
+    @staticmethod
+    def _draw_ellipse(
+        frame: np.ndarray,
+        center: tuple[int, int],
+        radius_x: int,
+        radius_y: int,
+        color: tuple[int, int, int],
+    ) -> None:
+        yy, xx = np.ogrid[: frame.shape[0], : frame.shape[1]]
+        mask = ((xx - center[0]) / max(1, radius_x)) ** 2 + ((yy - center[1]) / max(1, radius_y)) ** 2 <= 1
+        frame[mask] = color
+
 
 class DropletDetector:
     def __init__(self, camera: SimulatedCamera):
@@ -861,13 +892,13 @@ class DropletDetector:
                 if perimeter <= 0:
                     continue
                 circularity = 4.0 * math.pi * area / (perimeter * perimeter)
-                if circularity < 0.82:
+                if circularity < 0.62:
                     continue
                 x, y, w, h = cv2.boundingRect(contour)
                 if h == 0 or w == 0:
                     continue
                 aspect = w / h
-                if not 0.65 <= aspect <= 1.35:
+                if not 0.45 <= aspect <= 2.25:
                     continue
                 moments = cv2.moments(contour)
                 if moments["m00"] == 0:

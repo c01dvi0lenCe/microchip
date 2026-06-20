@@ -37,6 +37,16 @@ class MainControllerLayoutTests(unittest.TestCase):
             texts.extend(self._label_texts(child))
         return texts
 
+    def _canvas_oval_sizes(self, canvas=None):
+        canvas = canvas or self.app.path_canvas
+        sizes = []
+        for item in canvas.find_all():
+            if canvas.type(item) != "oval":
+                continue
+            x0, y0, x1, y1 = canvas.bbox(item)
+            sizes.append((x1 - x0, y1 - y0))
+        return sizes
+
     def test_main_notebook_defaults_to_manual_electrode_page(self):
         tabs = [self.app.main_notebook.tab(tab_id, "text") for tab_id in self.app.main_notebook.tabs()]
         self.assertEqual(tabs[:2], ["手动电极", "自动化路径规划"])
@@ -102,6 +112,45 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertIn("液滴A", labels)
         self.assertIn("液滴B", labels)
+
+    def test_mixing_phase_uses_horizontal_ellipse_droplet_shape(self):
+        self.app.operation_var.set(self.app.OP_MERGE)
+        self.app.on_operation_changed()
+        self.app.mixing_active = True
+        self.app.sim_droplet.reset((5, 5))
+        self.app.sim_droplets = [self.app.sim_droplet]
+
+        context = self.app._camera_render_context(manual_view=False)
+        self.app.matrix_canvas = self.app.path_canvas
+        self.app.path_canvas.delete("all")
+        self.app._grid_geometry = lambda: (0.0, 0.0, 400.0, 400.0, 20.0)
+        self.app._draw_position_marker((5, 5), self.app.colors["droplet_a"], radius_scale=0.34, shape=context["droplet_shapes"][0])
+        oval_sizes = self._canvas_oval_sizes()
+
+        self.assertEqual(context["droplet_shapes"], ["horizontal_ellipse"])
+        self.assertTrue(any(width > height * 1.25 for width, height in oval_sizes))
+
+    def test_horizontal_split_children_use_horizontal_ellipse_shapes(self):
+        self.app.operation_var.set(self.app.OP_SPLIT)
+        self.app.on_operation_changed()
+        self.app.start_cell = (5, 5)
+        self.app.split_left_cell = (5, 4)
+        self.app.split_right_cell = (5, 6)
+        self.app.sim_droplet.reset(self.app.split_left_cell)
+        self.app.sim_droplet_b.reset(self.app.split_right_cell)
+        self.app.sim_droplets = [self.app.sim_droplet, self.app.sim_droplet_b]
+        self.app.split_progress = 1.0
+
+        context = self.app._camera_render_context(manual_view=False)
+        self.app.matrix_canvas = self.app.path_canvas
+        self.app.path_canvas.delete("all")
+        self.app._grid_geometry = lambda: (0.0, 0.0, 400.0, 400.0, 20.0)
+        for cell, shape in zip((self.app.split_left_cell, self.app.split_right_cell), context["droplet_shapes"]):
+            self.app._draw_position_marker(cell, self.app.colors["droplet_a"], radius_scale=0.34, shape=shape)
+        oval_sizes = self._canvas_oval_sizes()
+
+        self.assertEqual(context["droplet_shapes"], ["horizontal_ellipse", "horizontal_ellipse"])
+        self.assertGreaterEqual(sum(width > height * 1.25 for width, height in oval_sizes), 2)
 
     def test_obstacle_tool_is_available_only_for_automatic_planning(self):
         self.assertIn(self.app.TOOL_OBSTACLE, self.app._tool_options_for_operation())
