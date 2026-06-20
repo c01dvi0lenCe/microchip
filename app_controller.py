@@ -283,6 +283,7 @@ class STM32MatrixController:
 
         self._build_control_card(content)
         self.cell_status_labels = []
+        self.matrix_legends = {}
 
         self.main_splitter = tk.PanedWindow(
             content,
@@ -878,35 +879,8 @@ class STM32MatrixController:
 
         legend = tk.Frame(card, bg=self.colors["panel"])
         legend.pack(fill="x", padx=10, pady=(0, 4))
-        legend_items = [
-            ("液滴", self.colors["droplet_a"], "white"),
-            ("储液池", self.colors["reservoir"], self.colors["text"]),
-            ("障碍", self.colors["obstacle"], "white"),
-            ("激活", self.colors["btn_on"], "white"),
-        ]
-        if not manual:
-            legend_items = [
-                ("液滴A", self.colors["droplet_a"], "white"),
-                ("液滴B", self.colors["droplet_b"], "white"),
-                ("检测", self.colors["detected"], self.colors["text"]),
-                ("路径", self.colors["path"], self.colors["text"]),
-                ("障碍", self.colors["obstacle"], "white"),
-                ("储液池", self.colors["reservoir"], self.colors["text"]),
-                ("有液池", self.colors["reservoir_loaded"], self.colors["text"]),
-                ("初始滴", self.colors["initial_droplet"], "white"),
-                ("目标", self.colors["target_sample"], self.colors["text"]),
-                ("激活", self.colors["btn_on"], "white"),
-            ]
-        for text, color, fg in legend_items:
-            tk.Label(
-                legend,
-                text=text,
-                bg=color,
-                fg=fg,
-                font=(self.font_family, 9, "bold"),
-                padx=6,
-                pady=1,
-            ).pack(side="left", padx=(0, 6))
+        self.matrix_legends["manual" if manual else "auto"] = legend
+        self._refresh_matrix_legend(manual=manual)
 
         holder = tk.Frame(card, bg=self.colors["panel_alt"], bd=1, relief="solid")
         holder.pack(padx=8, pady=(0, 8))
@@ -921,6 +895,48 @@ class STM32MatrixController:
         canvas.bind("<Motion>", self.on_matrix_motion)
         canvas.bind("<Leave>", self.on_matrix_leave)
         return card, canvas
+
+    def _legend_items_for_matrix(self, manual=False):
+        if manual:
+            return [
+                ("液滴", self.colors["droplet_a"], "white"),
+                ("储液池", self.colors["reservoir"], self.colors["text"]),
+                ("障碍", self.colors["obstacle"], "white"),
+                ("激活", self.colors["btn_on"], "white"),
+            ]
+        droplet_items = [
+            ("液滴A", self.colors["droplet_a"], "white"),
+            ("液滴B", self.colors["droplet_b"], "white"),
+        ]
+        if self.operation_var.get() == self.OP_MULTI:
+            droplet_items = [("液滴", self.colors["droplet_a"], "white")]
+        return droplet_items + [
+            ("检测", self.colors["detected"], self.colors["text"]),
+            ("路径", self.colors["path"], self.colors["text"]),
+            ("障碍", self.colors["obstacle"], "white"),
+            ("储液池", self.colors["reservoir"], self.colors["text"]),
+            ("有液池", self.colors["reservoir_loaded"], self.colors["text"]),
+            ("初始滴", self.colors["initial_droplet"], "white"),
+            ("目标", self.colors["target_sample"], self.colors["text"]),
+            ("激活", self.colors["btn_on"], "white"),
+        ]
+
+    def _refresh_matrix_legend(self, manual=False):
+        legend = getattr(self, "matrix_legends", {}).get("manual" if manual else "auto")
+        if legend is None:
+            return
+        for child in legend.winfo_children():
+            child.destroy()
+        for text, color, fg in self._legend_items_for_matrix(manual=manual):
+            tk.Label(
+                legend,
+                text=text,
+                bg=color,
+                fg=fg,
+                font=(self.font_family, 9, "bold"),
+                padx=6,
+                pady=1,
+            ).pack(side="left", padx=(0, 6))
 
     def _is_manual_canvas(self, canvas=None):
         return getattr(canvas or getattr(self, "matrix_canvas", None), "view_role", "") == "manual"
@@ -1025,6 +1041,7 @@ class STM32MatrixController:
         self._reset_droplets_for_operation()
         self._update_tool_options()
         self._update_operation_specific_controls()
+        self._refresh_matrix_legend(manual=False)
         self.path = []
         self.merge_path_b = []
         self.mixing_path = []

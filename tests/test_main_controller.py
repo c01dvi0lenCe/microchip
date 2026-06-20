@@ -26,6 +26,17 @@ class MainControllerLayoutTests(unittest.TestCase):
             except tk.TclError:
                 pass
 
+    def _label_texts(self, widget):
+        texts = []
+        for child in widget.winfo_children():
+            try:
+                if child.winfo_class() == "Label":
+                    texts.append(child.cget("text"))
+            except tk.TclError:
+                pass
+            texts.extend(self._label_texts(child))
+        return texts
+
     def test_main_notebook_defaults_to_manual_electrode_page(self):
         tabs = [self.app.main_notebook.tab(tab_id, "text") for tab_id in self.app.main_notebook.tabs()]
         self.assertEqual(tabs[:2], ["手动电极", "自动化路径规划"])
@@ -56,6 +67,25 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn("设置储液池", self.app._tool_options_for_operation())
         self.assertNotIn("设置加样", self.app._tool_options_for_operation())
         self.assertEqual(self.app.btn_clear_load.cget("text"), "清空储液池")
+
+    def test_multi_operation_uses_generic_droplet_legend(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.on_operation_changed()
+
+        labels = self._label_texts(self.app.path_matrix_card)
+
+        self.assertIn("液滴", labels)
+        self.assertNotIn("液滴A", labels)
+        self.assertNotIn("液滴B", labels)
+
+    def test_mixing_operation_keeps_droplet_a_b_legend(self):
+        self.app.operation_var.set(self.app.OP_MERGE)
+        self.app.on_operation_changed()
+
+        labels = self._label_texts(self.app.path_matrix_card)
+
+        self.assertIn("液滴A", labels)
+        self.assertIn("液滴B", labels)
 
     def test_obstacle_tool_is_available_only_for_automatic_planning(self):
         self.assertIn(self.app.TOOL_OBSTACLE, self.app._tool_options_for_operation())
