@@ -21,6 +21,7 @@ from dmf_simulation import (
     grid_polyline_cells,
     is_reservoir_cell,
     schedule_multi_paths,
+    target_merge_region_map,
 )
 
 
@@ -266,6 +267,21 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertEqual(len(build_multi_droplet_assignments([(-3, 6)], five_targets, planner)), 5)
         self.assertEqual(build_multi_droplet_assignments([(-3, 6)], six_targets, planner), [])
 
+    def test_higher_capacity_reservoir_is_selected_before_lower_capacity_one(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        low_capacity_neck = (-1, 6)
+        high_capacity_pool = (-3, 6)
+
+        assignments = build_multi_droplet_assignments(
+            [low_capacity_neck, high_capacity_pool],
+            [(0, 6)],
+            planner,
+            source_capacity={low_capacity_neck: 1, high_capacity_pool: 5},
+        )
+
+        self.assertEqual(len(assignments), 1)
+        self.assertEqual(assignments[0].source, high_capacity_pool)
+
     def test_single_reservoir_emits_next_droplet_after_previous_leaves(self):
         planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
         assignments = build_multi_droplet_assignments([(-3, 6)], [(4, 6), (5, 6), (6, 6)], planner)
@@ -323,10 +339,11 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertEqual(len(assignments), len(dense_targets))
         self.assertEqual({assignment.target for assignment in assignments}, set(dense_targets))
         schedules = [assignment.scheduled_path for assignment in assignments]
+        regions = target_merge_region_map(dense_targets)
         max_len = max(len(schedule) for schedule in schedules)
-        max_moving = 0
+        max_moving_by_region = {}
         for step in range(max_len):
-            moving = 0
+            moving_by_region = {}
             for schedule in schedules:
                 current = schedule[step] if step < len(schedule) else schedule[-1]
                 if step == 0:
@@ -336,9 +353,30 @@ class DmfSimulationTests(unittest.TestCase):
                 else:
                     previous = schedule[-1]
                 if current is not None and current != previous:
-                    moving += 1
-            max_moving = max(max_moving, moving)
-        self.assertLessEqual(max_moving, 4)
+                    region = regions.get(current)
+                    if region is None:
+                        continue
+                    moving_by_region[region] = moving_by_region.get(region, 0) + 1
+            for region, count in moving_by_region.items():
+                max_moving_by_region[region] = max(max_moving_by_region.get(region, 0), count)
+        self.assertTrue(max_moving_by_region)
+        self.assertLessEqual(max(max_moving_by_region.values()), 4)
+
+    def test_non_contaminating_multi_paths_run_in_same_parallel_round(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(0, 0), (0, 5), (5, 0), (5, 5), (10, 0), (10, 5)]
+        targets = [(0, 2), (0, 7), (5, 2), (5, 7), (10, 2), (10, 7)]
+
+        assignments = build_multi_droplet_assignments(sources, targets, planner)
+
+        self.assertEqual(len(assignments), len(targets))
+        self.assertEqual({assignment.round_index for assignment in assignments}, {1})
+        schedules = [assignment.scheduled_path for assignment in assignments]
+        moving_at_first_step = 0
+        for schedule in schedules:
+            if len(schedule) > 1 and schedule[0] is not None and schedule[1] != schedule[0]:
+                moving_at_first_step += 1
+        self.assertEqual(moving_at_first_step, len(targets))
 
     def test_multi_scheduler_allows_same_cell_at_different_times(self):
         paths = [

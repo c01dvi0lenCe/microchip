@@ -2734,7 +2734,7 @@ class STM32MatrixController:
         if round_count > 1:
             self.log(
                 f"目标较密集或数量较多，已自动拆为 {round_count} 轮并行调度；"
-                f"每轮最多 {MAX_PARALLEL_MULTI_DROPLETS} 滴，运输阶段启用对角安全避让"
+                f"同一连通液区每轮最多 {MAX_PARALLEL_MULTI_DROPLETS} 滴，无污染区域可同时并行"
             )
         merge_regions = self._target_merge_regions()
         if merge_regions:

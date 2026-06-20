@@ -248,22 +248,37 @@ def assign_sources_to_targets(
 
     assignments: list[tuple[Cell, Cell, list[Cell]]] = []
     for target in target_list:
-        best: Optional[tuple[int, int, Cell, list[Cell]]] = None
+        best: Optional[tuple[int, int, int, Cell, list[Cell]]] = None
         for source in source_list:
             if remaining_capacity.get(source, 0) <= 0:
                 continue
             path = planner.plan(source, target, obstacles_set - {source, target})
             if not path:
                 continue
-            candidate = (len(path), electrode_id(source[0], source[1]), source, path)
+            pull_priority = _source_pull_priority(source, remaining_capacity)
+            candidate = (
+                len(path) * 2 - pull_priority,
+                len(path),
+                -pull_priority,
+                electrode_id(source[0], source[1]),
+                source,
+                path,
+            )
             if best is None or candidate < best:
                 best = candidate
         if best is None:
             return []
-        _, _, source, path = best
+        _, _, _, _, source, path = best
         remaining_capacity[source] -= 1
         assignments.append((source, target, path))
     return sorted(assignments, key=lambda item: (electrode_id(item[0][0], item[0][1]), -len(item[2]), item[1]))
+
+
+def _source_pull_priority(source: Cell, remaining_capacity: Mapping[Cell, int]) -> int:
+    remaining = remaining_capacity.get(source, 0)
+    if is_reservoir_cell(source):
+        return remaining
+    return RESERVOIR_DROPLET_CAPACITY + remaining
 
 
 def _source_capacity_map(
@@ -293,20 +308,41 @@ def _unique_cells(cells: Iterable[Cell]) -> list[Cell]:
     return ordered
 
 
+def target_merge_region_map(cells: Iterable[Cell]) -> dict[Cell, int]:
+    remaining = set(cells)
+    regions: dict[Cell, int] = {}
+    region_id = 0
+    while remaining:
+        region_id += 1
+        start = remaining.pop()
+        regions[start] = region_id
+        stack = [start]
+        while stack:
+            row, col = stack.pop()
+            for nxt in ((row - 1, col), (row + 1, col), (row, col - 1), (row, col + 1)):
+                if nxt not in remaining:
+                    continue
+                remaining.remove(nxt)
+                regions[nxt] = region_id
+                stack.append(nxt)
+    return regions
+
+
 def schedule_multi_paths(
     paths: Iterable[list[Cell]],
     max_wait_steps: int = 220,
     existing_paths: Iterable[list[Optional[Cell]]] = (),
     min_start_delay: int = 0,
     merge_cells: Iterable[Cell] = (),
+    merge_regions: Optional[Mapping[Cell, int]] = None,
 ) -> list[list[Optional[Cell]]]:
     scheduled_paths: list[list[Optional[Cell]]] = [list(path) for path in existing_paths]
     new_schedules: list[list[Optional[Cell]]] = []
-    merge_set = set(merge_cells)
+    region_map = dict(merge_regions) if merge_regions is not None else target_merge_region_map(merge_cells)
     for path in paths:
         if not path:
             return []
-        scheduled = _schedule_one_multi_path(path, scheduled_paths, max_wait_steps, min_start_delay, merge_set)
+        scheduled = _schedule_one_multi_path(path, scheduled_paths, max_wait_steps, min_start_delay, region_map)
         if not scheduled:
             return []
         scheduled_paths.append(scheduled)
@@ -319,10 +355,10 @@ def _schedule_one_multi_path(
     existing_paths: list[list[Optional[Cell]]],
     max_wait_steps: int,
     min_start_delay: int = 0,
-    merge_cells: Optional[set[Cell]] = None,
+    merge_regions: Optional[Mapping[Cell, int]] = None,
 ) -> list[Optional[Cell]]:
     own_goal = path[-1]
-    merge_cells = merge_cells or set()
+    region_map = dict(merge_regions or {})
     for start_delay in range(min_start_delay, min_start_delay + max_wait_steps + 1):
         scheduled: list[Optional[Cell]] = [None] * start_delay
         path_index = 0
@@ -332,11 +368,11 @@ def _schedule_one_multi_path(
             step = len(scheduled)
             previous_cell = scheduled[-1] if scheduled else None
             candidate_cell = path[path_index]
-            if _multi_step_conflicts(existing_paths, previous_cell, candidate_cell, step, own_goal, merge_cells):
+            if _multi_step_conflicts(existing_paths, previous_cell, candidate_cell, step, own_goal, region_map):
                 if previous_cell is None:
                     failed = True
                     break
-                if _multi_step_conflicts(existing_paths, previous_cell, previous_cell, step, own_goal, merge_cells):
+                if _multi_step_conflicts(existing_paths, previous_cell, previous_cell, step, own_goal, region_map):
                     failed = True
                     break
                 scheduled.append(previous_cell)
@@ -352,6 +388,59 @@ def _schedule_one_multi_path(
     return []
 
 
+def schedule_multi_paths_by_contamination_groups(
+    paths: Iterable[list[Cell]],
+    group_ids: Iterable[int],
+    max_parallel: int = 4,
+    max_wait_steps: int = 220,
+    merge_cells: Iterable[Cell] = (),
+    merge_regions: Optional[Mapping[Cell, int]] = None,
+) -> tuple[list[list[Optional[Cell]]], list[int]]:
+    path_list = list(paths)
+    group_list = list(group_ids)
+    if not path_list:
+        return [], []
+    if len(path_list) != len(group_list):
+        return [], []
+
+    max_parallel = max(1, min(max_parallel, len(path_list)))
+    region_map = dict(merge_regions) if merge_regions is not None else target_merge_region_map(merge_cells)
+    combined: list[list[Optional[Cell]]] = []
+    scheduled_by_index: list[Optional[list[Optional[Cell]]]] = [None] * len(path_list)
+    round_indices: list[int] = [1] * len(path_list)
+    group_state: dict[int, dict[str, int]] = {}
+
+    for idx, (path, group_id) in enumerate(zip(path_list, group_list)):
+        state = group_state.setdefault(
+            group_id,
+            {"round": 1, "count": 0, "start": 0, "end": 0},
+        )
+        if state["count"] >= max_parallel:
+            state["round"] += 1
+            state["count"] = 0
+            state["start"] = state["end"]
+
+        scheduled = _schedule_one_multi_path(
+            path,
+            combined,
+            max_wait_steps=max_wait_steps,
+            min_start_delay=state["start"],
+            merge_regions=region_map,
+        )
+        if not scheduled:
+            return [], []
+
+        combined.append(scheduled)
+        scheduled_by_index[idx] = scheduled
+        round_indices[idx] = state["round"]
+        state["count"] += 1
+        state["end"] = max(state["end"], len(scheduled))
+
+    if any(schedule is None for schedule in scheduled_by_index):
+        return [], []
+    return [schedule for schedule in scheduled_by_index if schedule is not None], round_indices
+
+
 def schedule_multi_paths_in_rounds(
     paths: Iterable[list[Cell]],
     max_parallel: int = 4,
@@ -359,34 +448,15 @@ def schedule_multi_paths_in_rounds(
     merge_cells: Iterable[Cell] = (),
 ) -> tuple[list[list[Optional[Cell]]], list[int]]:
     path_list = list(paths)
-    if not path_list:
-        return [], []
-
-    max_parallel = max(1, min(max_parallel, len(path_list)))
-    for batch_size in range(max_parallel, 0, -1):
-        combined: list[list[Optional[Cell]]] = []
-        round_indices: list[int] = []
-        failed = False
-        round_index = 1
-        for start in range(0, len(path_list), batch_size):
-            batch = path_list[start : start + batch_size]
-            min_start = max((len(path) for path in combined), default=0)
-            scheduled_batch = schedule_multi_paths(
-                batch,
-                max_wait_steps=max_wait_steps,
-                existing_paths=combined,
-                min_start_delay=min_start,
-                merge_cells=merge_cells,
-            )
-            if len(scheduled_batch) != len(batch):
-                failed = True
-                break
-            combined.extend(scheduled_batch)
-            round_indices.extend([round_index] * len(batch))
-            round_index += 1
-        if not failed:
-            return combined, round_indices
-    return [], []
+    merge_regions = target_merge_region_map(merge_cells)
+    group_ids = [merge_regions.get(path[-1], idx + 1) for idx, path in enumerate(path_list)]
+    return schedule_multi_paths_by_contamination_groups(
+        path_list,
+        group_ids,
+        max_parallel=max_parallel,
+        max_wait_steps=max_wait_steps,
+        merge_regions=merge_regions,
+    )
 
 
 def build_multi_droplet_assignments(
@@ -406,21 +476,14 @@ def build_multi_droplet_assignments(
         return []
 
     raw_paths = [path for _, _, path in raw_assignments]
-    if len(raw_paths) > MAX_PARALLEL_MULTI_DROPLETS:
-        scheduled_paths, round_indices = schedule_multi_paths_in_rounds(
-            raw_paths,
-            max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
-            merge_cells=target_list,
-        )
-    else:
-        scheduled_paths = schedule_multi_paths(raw_paths, merge_cells=target_list)
-        round_indices = [1] * len(raw_assignments)
-        if len(scheduled_paths) != len(raw_assignments):
-            scheduled_paths, round_indices = schedule_multi_paths_in_rounds(
-                raw_paths,
-                max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
-                merge_cells=target_list,
-            )
+    merge_regions = target_merge_region_map(target_list)
+    group_ids = [merge_regions.get(target, idx + 1) for idx, (_, target, _) in enumerate(raw_assignments)]
+    scheduled_paths, round_indices = schedule_multi_paths_by_contamination_groups(
+        raw_paths,
+        group_ids,
+        max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
+        merge_regions=merge_regions,
+    )
     if len(scheduled_paths) != len(raw_assignments):
         return []
 
@@ -443,7 +506,7 @@ def _multi_step_conflicts(
     candidate_cell: Optional[Cell],
     step: int,
     own_goal: Cell,
-    merge_cells: set[Cell],
+    merge_regions: Mapping[Cell, int],
 ) -> bool:
     if candidate_cell is None:
         return False
@@ -453,8 +516,11 @@ def _multi_step_conflicts(
         other_goal = next((cell for cell in reversed(existing) if cell is not None), None)
         if other_now is None:
             continue
-        in_same_merge_region = candidate_cell in merge_cells and other_now in merge_cells
-        approaching_merge_region = own_goal in merge_cells and other_now in merge_cells
+        candidate_region = merge_regions.get(candidate_cell)
+        other_region = merge_regions.get(other_now)
+        own_region = merge_regions.get(own_goal)
+        in_same_merge_region = candidate_region is not None and candidate_region == other_region
+        approaching_merge_region = own_region is not None and own_region == other_region
         if candidate_cell == other_now:
             return not (in_same_merge_region or approaching_merge_region)
         if in_pull_risk_zone(candidate_cell, other_now):
