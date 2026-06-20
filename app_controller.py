@@ -159,7 +159,7 @@ class STM32MatrixController:
         self.multi_droplet_visible = []
         self.multi_step_index = 0
         self.multi_step_start_time = 0.0
-        self.multi_step_duration_s = 0.85
+        self.multi_step_duration_s = 1.2
         self.last_plan_error = ""
         self.debug_tests_visible = False
         self.manual_droplet = None
@@ -190,8 +190,8 @@ class STM32MatrixController:
         self.step_start_time = 0.0
         self.step_replanned = False
         self.drop_frame_until = 0.0
-        self.detection_timeout_s = 0.5
-        self.step_timeout_s = 2.0
+        self.detection_timeout_s = 2.5
+        self.step_timeout_s = 4.0
         self.recovery_attempts = 0
         self.max_recovery_attempts = 3
         self.feedback_log_times = {}
@@ -650,15 +650,28 @@ class STM32MatrixController:
         self.btn_clear_obstacles.pack(side="left", padx=(6, 0))
 
     def _simulation_parameter_help_text(self):
-        return (
-            "运动真实度：控制液滴单步响应时间、随机偏移、过冲和卡滞概率；"
-            "理想用于功能演示，常规接近真实实验，困难用于压力测试。\n"
-            "视觉噪声：模拟相机检测丢帧、质心抖动、低对比和强反光；"
-            "关闭用于调试，轻微/强噪声用于验证闭环鲁棒性。\n"
-            "故障模式：无表示正常电极；随机卡滞会让部分步进变慢或卡住；"
-            "指定弱故障电极会把你设置的障碍/弱故障区域用于纠偏测试。\n"
-            "异常保护：检测到丢滴、疑似融合、跑偏或无法安全调度时，系统保持当前安全电极，"
-            "停止自动推进，等待复位、回退或重新规划。"
+        return "\n".join(
+            [
+                "1. 运动真实度",
+                "   理想：用于功能演示，液滴稳定按规划电极移动。",
+                "   常规：加入轻微响应延迟和偏移，更接近真实实验。",
+                "   困难：加入更强卡滞、过冲和偏移，用于压力测试。",
+                "",
+                "2. 视觉噪声",
+                "   关闭：仿真调试优先，正常情况下不应丢检。",
+                "   轻微：模拟少量丢帧和质心抖动，验证闭环鲁棒性。",
+                "   强噪声：模拟强反光、低对比和持续丢帧，用于故障演示。",
+                "",
+                "3. 故障模式",
+                "   无：不主动注入故障。",
+                "   随机卡滞：随机让部分步进变慢或卡住。",
+                "   指定弱故障电极：把你设置的障碍/弱故障区用于纠偏测试。",
+                "",
+                "4. 异常保护",
+                "   短时漏检：保持当前电极，等待视觉恢复。",
+                "   超时漏检、疑似融合、严重跑偏或无法安全调度：进入保护暂停。",
+                "   保护暂停后可复位、回退、重新规划或清空故障后再启动。",
+            ]
         )
 
     def show_simulation_parameter_help(self):
@@ -904,11 +917,12 @@ class STM32MatrixController:
                 ("障碍", self.colors["obstacle"], "white"),
                 ("激活", self.colors["btn_on"], "white"),
             ]
-        droplet_items = [
-            ("液滴A", self.colors["droplet_a"], "white"),
-            ("液滴B", self.colors["droplet_b"], "white"),
-        ]
-        if self.operation_var.get() == self.OP_MULTI:
+        if self.operation_var.get() == self.OP_MERGE:
+            droplet_items = [
+                ("液滴A", self.colors["droplet_a"], "white"),
+                ("液滴B", self.colors["droplet_b"], "white"),
+            ]
+        else:
             droplet_items = [("液滴", self.colors["droplet_a"], "white")]
         return droplet_items + [
             ("检测", self.colors["detected"], self.colors["text"]),
@@ -3690,9 +3704,20 @@ class STM32MatrixController:
 
         detected_count = len(self.latest_detections)
         if detected_count < visible_count and self.multi_step_index < max_steps - 1:
+            self._record_metric_dropout()
+            now = time.monotonic()
+            elapsed = now - self.last_detection_time
             hold_cells = set(self.detected_cells) or {
                 self.sim_droplets[idx].cell for idx in visible_indices
             }
+            if elapsed <= self.detection_timeout_s:
+                self.log_feedback(
+                    "多液滴视觉",
+                    f"暂时检测到 {detected_count}/{visible_count} 滴，保持当前电极等待恢复 {elapsed:.2f}s",
+                    key="multi_visual_dropout_wait",
+                    interval_s=0.35,
+                )
+                return False
             self.log_feedback(
                 "多液滴保护",
                 f"应见 {visible_count} 滴，仅检测到 {detected_count} 滴，按疑似融合/遮挡处理并保持 {len(hold_cells)} 个电极",
@@ -3703,6 +3728,8 @@ class STM32MatrixController:
                 hold_cells,
             )
             return False
+        if detected_count >= visible_count:
+            self.last_detection_time = time.monotonic()
 
         if visible_count == 1 and detected_count == 1:
             idx = visible_indices[0]
@@ -4200,7 +4227,7 @@ class STM32MatrixController:
         )
         if elapsed > self.detection_timeout_s:
             self.log_feedback("视觉", "检测丢失超过阈值，停止闭环并关闭自动推进", force=True)
-            self.stop_auto_control("检测丢失超过 0.5 s")
+            self.stop_auto_control(f"检测丢失超过 {self.detection_timeout_s:.1f} s")
         return None
 
     def _single_detection_on_track(self, detection):

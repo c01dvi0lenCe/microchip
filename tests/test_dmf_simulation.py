@@ -148,6 +148,22 @@ class DmfSimulationTests(unittest.TestCase):
         cells = {detection.cell for detection in detections}
         self.assertEqual(cells, {(4, 4), (12, 12)})
 
+    def test_detector_returns_droplet_on_active_electrode(self):
+        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
+        detector = DropletDetector(camera)
+        frame = camera.render(
+            (5.0, 7.0),
+            active_cells={(5, 7)},
+            path={(5, 7), (5, 8)},
+            target_cells={(5, 9)},
+            obstacles={(8, 8)},
+        )
+
+        detections = detector.detect_all(frame)
+        cells = {detection.cell for detection in detections}
+
+        self.assertEqual(cells, {(5, 7)})
+
     def test_detector_returns_all_multi_droplet_palette_colors(self):
         camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
         detector = DropletDetector(camera)

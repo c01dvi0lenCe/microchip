@@ -5,7 +5,7 @@ import time
 import unittest
 from pathlib import Path
 
-from dmf_simulation import StepEvent, electrode_id
+from dmf_simulation import MultiDropletAssignment, SimulatedDroplet, StepEvent, electrode_id
 from main import STM32MatrixController
 
 
@@ -54,6 +54,10 @@ class MainControllerLayoutTests(unittest.TestCase):
     def test_simulation_parameter_help_explains_controls(self):
         help_text = self.app._simulation_parameter_help_text()
 
+        self.assertIn("1. 运动真实度", help_text)
+        self.assertIn("2. 视觉噪声", help_text)
+        self.assertIn("3. 故障模式", help_text)
+        self.assertIn("4. 异常保护", help_text)
         self.assertIn("运动真实度", help_text)
         self.assertIn("视觉噪声", help_text)
         self.assertIn("故障模式", help_text)
@@ -77,6 +81,18 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn("液滴", labels)
         self.assertNotIn("液滴A", labels)
         self.assertNotIn("液滴B", labels)
+
+    def test_single_droplet_operations_use_generic_droplet_legend(self):
+        for operation in (self.app.OP_MOVE, self.app.OP_SPLIT, self.app.OP_LOOP):
+            with self.subTest(operation=operation):
+                self.app.operation_var.set(operation)
+                self.app.on_operation_changed()
+
+                labels = self._label_texts(self.app.path_matrix_card)
+
+                self.assertIn("液滴", labels)
+                self.assertNotIn("液滴A", labels)
+                self.assertNotIn("液滴B", labels)
 
     def test_mixing_operation_keeps_droplet_a_b_legend(self):
         self.app.operation_var.set(self.app.OP_MERGE)
@@ -757,6 +773,11 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertGreater(self.app._motion_profile().stuck_probability, 0.0)
         self.assertGreater(self.app._vision_noise_profile().drop_frame_rate, 0.0)
 
+    def test_simulation_timeouts_are_slower_than_visual_step(self):
+        self.assertGreaterEqual(self.app.multi_step_duration_s, 1.0)
+        self.assertGreaterEqual(self.app.detection_timeout_s, self.app.multi_step_duration_s * 2)
+        self.assertGreater(self.app.step_timeout_s, self.app.detection_timeout_s)
+
     def test_auto_switch_records_break_before_make_metrics(self):
         commands = []
         self.app.send_command = lambda command, log_send=True: commands.append(command) or True
@@ -788,6 +809,26 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIsNone(detection)
         self.assertTrue(self.app.auto_running)
         self.assertEqual(self.app.operation_metrics.dropout_count, 1)
+
+    def test_multi_visual_dropout_waits_before_protecting(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 0), (0, 2), [(0, 0), (0, 1), (0, 2)], [(0, 0), (0, 1), (0, 2)]),
+            MultiDropletAssignment(2, (2, 0), (2, 2), [(2, 0), (2, 1), (2, 2)], [(2, 0), (2, 1), (2, 2)]),
+        ]
+        self.app.sim_droplets = [SimulatedDroplet((0, 1)), SimulatedDroplet((2, 1))]
+        self.app.multi_droplet_visible = [True, True]
+        self.app.multi_step_index = 1
+        self.app.latest_detections = []
+        self.app.detected_cells = []
+        self.app.auto_running = True
+        self.app.last_detection_time = time.monotonic()
+
+        healthy = self.app._check_multi_visual_health(max_steps=3)
+
+        self.assertFalse(healthy)
+        self.assertTrue(self.app.auto_running)
+        self.assertNotIn("保护暂停", self.app.auto_status_label.cget("text"))
 
     def test_metrics_export_writes_csv_rows(self):
         self.app.operation_metrics_history = [self.app._new_operation_metrics("move")]

@@ -24,6 +24,17 @@ BOARD_FRAME_MM = 100.0
 INITIAL_DROPLET_CAPACITY = 1
 RESERVOIR_DROPLET_CAPACITY = 5
 CAMERA_LAYOUT_PADDING_CELLS = 5.4
+DROPLET_DETECTION_RGB = (
+    (24, 82, 194),
+    (178, 58, 72),
+    (155, 77, 202),
+    (0, 123, 131),
+    (199, 125, 0),
+    (78, 122, 46),
+    (47, 95, 154),
+    (125, 79, 42),
+)
+DROPLET_DETECTION_TOLERANCE = 82
 
 SIDE_RESERVOIR_COLS = (6, 13)
 SIDE_RESERVOIR_ROWS = (6, 13)
@@ -833,11 +844,7 @@ class DropletDetector:
 
     def detect_all(self, frame_rgb: np.ndarray) -> list[Detection]:
         if cv2 is not None:
-            hsv = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2HSV)
-            blue_mask = cv2.inRange(hsv, (95, 80, 60), (135, 255, 255))
-            magenta_mask = cv2.inRange(hsv, (160, 80, 60), (179, 255, 255))
-            saturated_mask = cv2.inRange(hsv, (0, 70, 35), (179, 255, 255))
-            mask = cv2.bitwise_or(cv2.bitwise_or(blue_mask, magenta_mask), saturated_mask)
+            mask = self._droplet_color_mask(frame_rgb).astype(np.uint8) * 255
             kernel = np.ones((3, 3), dtype=np.uint8)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -876,11 +883,21 @@ class DropletDetector:
         blue = frame_rgb[:, :, 2]
         blue_mask = (blue > 140) & (red < 80) & (green < 140)
         magenta_mask = (red > 120) & (green < 85) & (blue > 50)
-        mask = blue_mask | magenta_mask
+        mask = blue_mask | magenta_mask | self._droplet_color_mask(frame_rgb)
         ys, xs = np.nonzero(mask)
         if len(xs) < 30:
             return []
         return [self._build_detection(float(xs.mean()), float(ys.mean()), float(len(xs)))]
+
+    @staticmethod
+    def _droplet_color_mask(frame_rgb: np.ndarray) -> np.ndarray:
+        frame = frame_rgb.astype(np.int32)
+        mask = np.zeros(frame.shape[:2], dtype=bool)
+        for color in DROPLET_DETECTION_RGB:
+            diff = frame - np.array(color, dtype=np.int32)
+            distance = np.sqrt(np.sum(diff * diff, axis=2))
+            mask |= distance <= DROPLET_DETECTION_TOLERANCE
+        return mask
 
     def _build_detection(self, x: float, y: float, area: float) -> Detection:
         grid_position = self.camera.pixel_to_grid_position(x, y)
