@@ -291,6 +291,55 @@ class DmfSimulationTests(unittest.TestCase):
                     self.assertNotEqual(first, second)
                     self.assertFalse(previous[i] == second and first == previous[j])
 
+    def test_multi_scheduler_avoids_diagonal_risk_during_transport(self):
+        paths = [
+            [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)],
+            [(2, 2), (1, 2), (1, 3), (2, 3)],
+        ]
+
+        schedules = schedule_multi_paths(paths)
+
+        self.assertEqual(len(schedules), 2)
+        max_len = max(len(schedule) for schedule in schedules)
+        for step in range(max_len):
+            first = schedules[0][step] if step < len(schedules[0]) else schedules[0][-1]
+            second = schedules[1][step] if step < len(schedules[1]) else schedules[1][-1]
+            if first is None or second is None:
+                continue
+            both_at_goals = first == paths[0][-1] and second == paths[1][-1]
+            if not both_at_goals:
+                self.assertGreater(max(abs(first[0] - second[0]), abs(first[1] - second[1])), 1)
+
+    def test_dense_letter_targets_are_split_into_parallel_rounds(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3)]
+        dense_targets = [
+            (3, 3), (3, 4), (3, 5), (4, 3), (5, 3), (6, 3), (6, 4), (6, 5),
+            (3, 8), (3, 9), (4, 8), (5, 8), (5, 9), (6, 9), (6, 8),
+        ]
+
+        assignments = build_multi_droplet_assignments(sources, dense_targets, planner)
+
+        self.assertEqual(len(assignments), len(dense_targets))
+        self.assertEqual({assignment.target for assignment in assignments}, set(dense_targets))
+        schedules = [assignment.scheduled_path for assignment in assignments]
+        max_len = max(len(schedule) for schedule in schedules)
+        max_moving = 0
+        for step in range(max_len):
+            moving = 0
+            for schedule in schedules:
+                current = schedule[step] if step < len(schedule) else schedule[-1]
+                if step == 0:
+                    previous = None
+                elif step - 1 < len(schedule):
+                    previous = schedule[step - 1]
+                else:
+                    previous = schedule[-1]
+                if current is not None and current != previous:
+                    moving += 1
+            max_moving = max(max_moving, moving)
+        self.assertLessEqual(max_moving, 4)
+
     def test_multi_scheduler_allows_same_cell_at_different_times(self):
         paths = [
             [(0, 0), (0, 1), (0, 2), (0, 3)],

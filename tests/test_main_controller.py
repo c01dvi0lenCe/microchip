@@ -913,6 +913,27 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertTrue(self.app.auto_running)
         self.assertNotIn("保护暂停", self.app.auto_status_label.cget("text"))
 
+    def test_multi_visual_health_allows_settled_target_merge(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.target_shape_cells = [(0, 2), (0, 3)]
+        self.app.multi_targets = [(0, 2), (0, 3)]
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 0), (0, 2), [(0, 0), (0, 1), (0, 2)], [(0, 0), (0, 1), (0, 2)]),
+            MultiDropletAssignment(2, (1, 0), (0, 3), [(1, 0), (1, 1), (0, 3)], [(1, 0), (1, 1), (0, 3)]),
+        ]
+        self.app.sim_droplets = [SimulatedDroplet((0, 2)), SimulatedDroplet((0, 3))]
+        self.app.multi_droplet_visible = [True, True]
+        self.app.multi_step_index = 2
+        self.app.latest_detections = []
+        self.app.detected_cells = []
+        self.app.auto_running = True
+
+        healthy = self.app._check_multi_visual_health(max_steps=3)
+
+        self.assertTrue(healthy)
+        self.assertTrue(self.app.auto_running)
+        self.assertNotIn("保护暂停", self.app.auto_status_label.cget("text"))
+
     def test_metrics_export_writes_csv_rows(self):
         self.app.operation_metrics_history = [self.app._new_operation_metrics("move")]
         self.app.operation_metrics_history[0].record_event(

@@ -22,6 +22,7 @@ from dmf_simulation import (
     GRID_ROWS,
     INITIAL_DROPLET_CAPACITY,
     LAYOUT_CELLS,
+    MAX_PARALLEL_MULTI_DROPLETS,
     MultiDropletAssignment,
     RESERVOIR_CELLS,
     RESERVOIR_CONNECTIONS,
@@ -2729,12 +2730,18 @@ class STM32MatrixController:
         max_steps = max(len(assignment.scheduled_path) for assignment in assignments)
         self.auto_status_label.config(text=f"闭环: 多液滴 {len(assignments)} 滴 / {max_steps - 1} 步", fg=self.colors["accent"])
         self.log(f"多液滴规划完成：{len(self.multi_targets)} 个目标电极将全部填满")
+        round_count = max(getattr(assignment, "round_index", 1) for assignment in assignments)
+        if round_count > 1:
+            self.log(
+                f"目标较密集或数量较多，已自动拆为 {round_count} 轮并行调度；"
+                f"每轮最多 {MAX_PARALLEL_MULTI_DROPLETS} 滴，运输阶段启用对角安全避让"
+            )
         merge_regions = self._target_merge_regions()
         if merge_regions:
-            self.log(f"相邻目标电极将视为 {len(merge_regions)} 个连通液区，移动过程中仍避免提前接触")
+            self.log(f"相邻目标电极将视为 {len(merge_regions)} 个连通液区，普通运输区仍避免相邻/对角拉扯")
         for assignment in assignments:
             self.log(
-                f"D{assignment.droplet_id}: {self._cell_label(assignment.source)} -> "
+                f"D{assignment.droplet_id}(第 {getattr(assignment, 'round_index', 1)} 轮): {self._cell_label(assignment.source)} -> "
                 f"{self._cell_label(assignment.target)} / {len(assignment.path) - 1} 步"
             )
         self._draw_matrix_canvas()

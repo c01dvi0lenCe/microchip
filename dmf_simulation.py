@@ -23,6 +23,7 @@ ELECTRODE_PITCH_MM = 3.2
 BOARD_FRAME_MM = 100.0
 INITIAL_DROPLET_CAPACITY = 1
 RESERVOIR_DROPLET_CAPACITY = 5
+MAX_PARALLEL_MULTI_DROPLETS = 4
 CAMERA_LAYOUT_PADDING_CELLS = 5.4
 DROPLET_DETECTION_RGB = (
     (24, 82, 194),
@@ -152,6 +153,10 @@ def is_core_cell(cell: Cell, rows: int = GRID_ROWS, cols: int = GRID_COLS) -> bo
 
 def are_touching(a: Cell, b: Cell) -> bool:
     return abs(a[0] - b[0]) + abs(a[1] - b[1]) <= 1
+
+
+def in_pull_risk_zone(a: Cell, b: Cell) -> bool:
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1])) <= 1
 
 
 def grid_polyline_cells(points: Iterable[Cell], rows: int = GRID_ROWS, cols: int = GRID_COLS) -> list[Cell]:
@@ -288,25 +293,37 @@ def _unique_cells(cells: Iterable[Cell]) -> list[Cell]:
     return ordered
 
 
-def schedule_multi_paths(paths: Iterable[list[Cell]], max_wait_steps: int = 220) -> list[list[Optional[Cell]]]:
-    scheduled_paths: list[list[Optional[Cell]]] = []
+def schedule_multi_paths(
+    paths: Iterable[list[Cell]],
+    max_wait_steps: int = 220,
+    existing_paths: Iterable[list[Optional[Cell]]] = (),
+    min_start_delay: int = 0,
+    merge_cells: Iterable[Cell] = (),
+) -> list[list[Optional[Cell]]]:
+    scheduled_paths: list[list[Optional[Cell]]] = [list(path) for path in existing_paths]
+    new_schedules: list[list[Optional[Cell]]] = []
+    merge_set = set(merge_cells)
     for path in paths:
         if not path:
             return []
-        scheduled = _schedule_one_multi_path(path, scheduled_paths, max_wait_steps)
+        scheduled = _schedule_one_multi_path(path, scheduled_paths, max_wait_steps, min_start_delay, merge_set)
         if not scheduled:
             return []
         scheduled_paths.append(scheduled)
-    return scheduled_paths
+        new_schedules.append(scheduled)
+    return new_schedules
 
 
 def _schedule_one_multi_path(
     path: list[Cell],
     existing_paths: list[list[Optional[Cell]]],
     max_wait_steps: int,
+    min_start_delay: int = 0,
+    merge_cells: Optional[set[Cell]] = None,
 ) -> list[Optional[Cell]]:
     own_goal = path[-1]
-    for start_delay in range(max_wait_steps + 1):
+    merge_cells = merge_cells or set()
+    for start_delay in range(min_start_delay, min_start_delay + max_wait_steps + 1):
         scheduled: list[Optional[Cell]] = [None] * start_delay
         path_index = 0
         wait_steps = 0
@@ -315,11 +332,11 @@ def _schedule_one_multi_path(
             step = len(scheduled)
             previous_cell = scheduled[-1] if scheduled else None
             candidate_cell = path[path_index]
-            if _multi_step_conflicts(existing_paths, previous_cell, candidate_cell, step, own_goal):
+            if _multi_step_conflicts(existing_paths, previous_cell, candidate_cell, step, own_goal, merge_cells):
                 if previous_cell is None:
                     failed = True
                     break
-                if _multi_step_conflicts(existing_paths, previous_cell, previous_cell, step, own_goal):
+                if _multi_step_conflicts(existing_paths, previous_cell, previous_cell, step, own_goal, merge_cells):
                     failed = True
                     break
                 scheduled.append(previous_cell)
@@ -333,6 +350,43 @@ def _schedule_one_multi_path(
         if not failed:
             return scheduled
     return []
+
+
+def schedule_multi_paths_in_rounds(
+    paths: Iterable[list[Cell]],
+    max_parallel: int = 4,
+    max_wait_steps: int = 220,
+    merge_cells: Iterable[Cell] = (),
+) -> tuple[list[list[Optional[Cell]]], list[int]]:
+    path_list = list(paths)
+    if not path_list:
+        return [], []
+
+    max_parallel = max(1, min(max_parallel, len(path_list)))
+    for batch_size in range(max_parallel, 0, -1):
+        combined: list[list[Optional[Cell]]] = []
+        round_indices: list[int] = []
+        failed = False
+        round_index = 1
+        for start in range(0, len(path_list), batch_size):
+            batch = path_list[start : start + batch_size]
+            min_start = max((len(path) for path in combined), default=0)
+            scheduled_batch = schedule_multi_paths(
+                batch,
+                max_wait_steps=max_wait_steps,
+                existing_paths=combined,
+                min_start_delay=min_start,
+                merge_cells=merge_cells,
+            )
+            if len(scheduled_batch) != len(batch):
+                failed = True
+                break
+            combined.extend(scheduled_batch)
+            round_indices.extend([round_index] * len(batch))
+            round_index += 1
+        if not failed:
+            return combined, round_indices
+    return [], []
 
 
 def build_multi_droplet_assignments(
@@ -351,7 +405,22 @@ def build_multi_droplet_assignments(
     if len(raw_assignments) != len(target_list):
         return []
 
-    scheduled_paths = schedule_multi_paths([path for _, _, path in raw_assignments])
+    raw_paths = [path for _, _, path in raw_assignments]
+    if len(raw_paths) > MAX_PARALLEL_MULTI_DROPLETS:
+        scheduled_paths, round_indices = schedule_multi_paths_in_rounds(
+            raw_paths,
+            max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
+            merge_cells=target_list,
+        )
+    else:
+        scheduled_paths = schedule_multi_paths(raw_paths, merge_cells=target_list)
+        round_indices = [1] * len(raw_assignments)
+        if len(scheduled_paths) != len(raw_assignments):
+            scheduled_paths, round_indices = schedule_multi_paths_in_rounds(
+                raw_paths,
+                max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
+                merge_cells=target_list,
+            )
     if len(scheduled_paths) != len(raw_assignments):
         return []
 
@@ -362,6 +431,7 @@ def build_multi_droplet_assignments(
             target=target,
             path=path,
             scheduled_path=scheduled_paths[idx - 1],
+            round_index=round_indices[idx - 1],
         )
         for idx, (source, target, path) in enumerate(raw_assignments, start=1)
     ]
@@ -373,6 +443,7 @@ def _multi_step_conflicts(
     candidate_cell: Optional[Cell],
     step: int,
     own_goal: Cell,
+    merge_cells: set[Cell],
 ) -> bool:
     if candidate_cell is None:
         return False
@@ -382,10 +453,16 @@ def _multi_step_conflicts(
         other_goal = next((cell for cell in reversed(existing) if cell is not None), None)
         if other_now is None:
             continue
+        in_same_merge_region = candidate_cell in merge_cells and other_now in merge_cells
+        approaching_merge_region = own_goal in merge_cells and other_now in merge_cells
         if candidate_cell == other_now:
-            return True
-        if are_touching(candidate_cell, other_now):
-            if not (candidate_cell == own_goal and other_now == other_goal):
+            return not (in_same_merge_region or approaching_merge_region)
+        if in_pull_risk_zone(candidate_cell, other_now):
+            if not (
+                in_same_merge_region
+                or approaching_merge_region
+                or (candidate_cell == own_goal and other_now == other_goal)
+            ):
                 return True
         if previous_cell is not None and other_prev is not None and previous_cell == other_now and candidate_cell == other_prev:
             return True
@@ -533,6 +610,7 @@ class MultiDropletAssignment:
     target: Cell
     path: list[Cell]
     scheduled_path: list[Optional[Cell]]
+    round_index: int = 1
 
 
 @dataclass
