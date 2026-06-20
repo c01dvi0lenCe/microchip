@@ -836,7 +836,8 @@ class DropletDetector:
             hsv = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2HSV)
             blue_mask = cv2.inRange(hsv, (95, 80, 60), (135, 255, 255))
             magenta_mask = cv2.inRange(hsv, (160, 80, 60), (179, 255, 255))
-            mask = cv2.bitwise_or(blue_mask, magenta_mask)
+            saturated_mask = cv2.inRange(hsv, (0, 70, 35), (179, 255, 255))
+            mask = cv2.bitwise_or(cv2.bitwise_or(blue_mask, magenta_mask), saturated_mask)
             kernel = np.ones((3, 3), dtype=np.uint8)
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -848,6 +849,18 @@ class DropletDetector:
             for contour in contours:
                 area = float(cv2.contourArea(contour))
                 if area < 30:
+                    continue
+                perimeter = float(cv2.arcLength(contour, True))
+                if perimeter <= 0:
+                    continue
+                circularity = 4.0 * math.pi * area / (perimeter * perimeter)
+                if circularity < 0.82:
+                    continue
+                x, y, w, h = cv2.boundingRect(contour)
+                if h == 0 or w == 0:
+                    continue
+                aspect = w / h
+                if not 0.65 <= aspect <= 1.35:
                     continue
                 moments = cv2.moments(contour)
                 if moments["m00"] == 0:

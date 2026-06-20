@@ -20,6 +20,7 @@ from dmf_simulation import (
     electrode_id,
     grid_polyline_cells,
     is_reservoir_cell,
+    schedule_multi_paths,
 )
 
 
@@ -147,6 +148,25 @@ class DmfSimulationTests(unittest.TestCase):
         cells = {detection.cell for detection in detections}
         self.assertEqual(cells, {(4, 4), (12, 12)})
 
+    def test_detector_returns_all_multi_droplet_palette_colors(self):
+        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
+        detector = DropletDetector(camera)
+        positions = [(3.0, 3.0), (3.0, 10.0), (8.0, 4.0), (8.0, 14.0), (14.0, 6.0), (14.0, 15.0)]
+        colors = [
+            (24, 82, 194),
+            (178, 58, 72),
+            (155, 77, 202),
+            (0, 123, 131),
+            (199, 125, 0),
+            (78, 122, 46),
+        ]
+        frame = camera.render((0.0, 0.0), droplet_positions=positions, droplet_colors=colors)
+
+        detections = detector.detect_all(frame)
+        cells = {detection.cell for detection in detections}
+
+        self.assertEqual(cells, {(3, 3), (3, 10), (8, 4), (8, 14), (14, 6), (14, 15)})
+
     def test_motion_profile_can_delay_or_stall_droplet_motion(self):
         droplet = SimulatedDroplet((3, 3), speed_cells_per_sec=4.0)
         delayed = MotionProfile(name="test", response_delay_s=0.2)
@@ -240,6 +260,24 @@ class DmfSimulationTests(unittest.TestCase):
                         continue
                     self.assertNotEqual(first, second)
                     self.assertFalse(previous[i] == second and first == previous[j])
+
+    def test_multi_scheduler_allows_same_cell_at_different_times(self):
+        paths = [
+            [(0, 0), (0, 1), (0, 2), (0, 3)],
+            [(2, 1), (1, 1), (0, 1), (0, 0)],
+        ]
+
+        schedules = schedule_multi_paths(paths)
+
+        self.assertEqual(len(schedules), 2)
+        visits = [
+            step
+            for step in range(max(len(schedule) for schedule in schedules))
+            if all(step < len(schedule) and schedule[step] == (0, 1) for schedule in schedules)
+        ]
+        self.assertEqual(visits, [])
+        self.assertIn((0, 1), schedules[0])
+        self.assertIn((0, 1), schedules[1])
 
 
 if __name__ == "__main__":
