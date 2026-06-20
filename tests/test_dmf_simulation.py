@@ -208,6 +208,14 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertEqual({assignment.target for assignment in assignments}, set(shape))
         self.assertTrue(all(assignment.source == (-3, 6) for assignment in assignments))
 
+    def test_single_reservoir_is_limited_to_five_generated_droplets(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        five_targets = grid_polyline_cells([(10, 8), (10, 12)])
+        six_targets = grid_polyline_cells([(10, 8), (10, 13)])
+
+        self.assertEqual(len(build_multi_droplet_assignments([(-3, 6)], five_targets, planner)), 5)
+        self.assertEqual(build_multi_droplet_assignments([(-3, 6)], six_targets, planner), [])
+
     def test_single_reservoir_emits_next_droplet_after_previous_leaves(self):
         planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
         assignments = build_multi_droplet_assignments([(-3, 6)], [(4, 6), (5, 6), (6, 6)], planner)

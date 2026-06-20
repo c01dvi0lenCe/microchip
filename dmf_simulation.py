@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import heapq
 import math
 import random
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional
 
 import numpy as np
 
@@ -21,6 +21,8 @@ GRID_ROWS = 20
 GRID_COLS = 20
 ELECTRODE_PITCH_MM = 3.2
 BOARD_FRAME_MM = 100.0
+INITIAL_DROPLET_CAPACITY = 1
+RESERVOIR_DROPLET_CAPACITY = 5
 CAMERA_LAYOUT_PADDING_CELLS = 5.4
 
 SIDE_RESERVOIR_COLS = (6, 13)
@@ -216,6 +218,7 @@ def assign_sources_to_targets(
     targets: Iterable[Cell],
     planner: "AStarPlanner",
     obstacles: Iterable[Cell] = (),
+    source_capacity: Optional[Mapping[Cell, int]] = None,
 ) -> list[tuple[Cell, Cell, list[Cell]]]:
     source_list = sorted(set(sources), key=lambda cell: electrode_id(cell[0], cell[1]))
     target_list = _unique_cells(targets)
@@ -223,10 +226,16 @@ def assign_sources_to_targets(
     if not source_list or not target_list:
         return []
 
+    remaining_capacity = _source_capacity_map(source_list, source_capacity)
+    if sum(remaining_capacity.values()) < len(target_list):
+        return []
+
     assignments: list[tuple[Cell, Cell, list[Cell]]] = []
     for target in target_list:
         best: Optional[tuple[int, int, Cell, list[Cell]]] = None
         for source in source_list:
+            if remaining_capacity.get(source, 0) <= 0:
+                continue
             path = planner.plan(source, target, obstacles_set - {source, target})
             if not path:
                 continue
@@ -236,8 +245,25 @@ def assign_sources_to_targets(
         if best is None:
             return []
         _, _, source, path = best
+        remaining_capacity[source] -= 1
         assignments.append((source, target, path))
     return sorted(assignments, key=lambda item: (electrode_id(item[0][0], item[0][1]), -len(item[2]), item[1]))
+
+
+def _source_capacity_map(
+    sources: Iterable[Cell],
+    source_capacity: Optional[Mapping[Cell, int]] = None,
+) -> dict[Cell, int]:
+    capacity: dict[Cell, int] = {}
+    for source in sources:
+        if source_capacity is not None:
+            value = source_capacity.get(source, 0)
+        elif is_reservoir_cell(source):
+            value = RESERVOIR_DROPLET_CAPACITY
+        else:
+            value = INITIAL_DROPLET_CAPACITY
+        capacity[source] = max(0, int(value))
+    return capacity
 
 
 def _unique_cells(cells: Iterable[Cell]) -> list[Cell]:
@@ -303,13 +329,14 @@ def build_multi_droplet_assignments(
     target_shape_cells: Iterable[Cell],
     planner: "AStarPlanner",
     obstacles: Iterable[Cell] = (),
+    source_capacity: Optional[Mapping[Cell, int]] = None,
 ) -> list[MultiDropletAssignment]:
     source_list = sorted(set(sources), key=lambda cell: electrode_id(cell[0], cell[1]))
     target_list = _unique_cells(target_shape_cells)
     if not source_list or not target_list:
         return []
 
-    raw_assignments = assign_sources_to_targets(source_list, target_list, planner, obstacles)
+    raw_assignments = assign_sources_to_targets(source_list, target_list, planner, obstacles, source_capacity)
     if len(raw_assignments) != len(target_list):
         return []
 

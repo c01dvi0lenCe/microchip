@@ -57,6 +57,32 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertEqual(assignments[0].source, (4, 4))
         self.assertEqual(assignments[0].target, (4, 6))
 
+    def test_initial_core_droplet_can_only_fill_one_multi_target(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app._update_tool_options()
+        self.app.loaded_reservoirs.clear()
+        self.app.initial_droplet_cells = {(4, 4)}
+        self.app.target_shape_points = [(4, 6), (4, 7)]
+        self.app._rebuild_target_shape_cells()
+
+        assignments = self.app.plan_path()
+
+        self.assertEqual(assignments, [])
+        self.assertEqual(self.app.multi_assignments, [])
+
+    def test_loaded_reservoir_can_fill_at_most_five_multi_targets(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app._update_tool_options()
+        self.app.loaded_reservoirs = {(-3, 6)}
+        self.app.initial_droplet_cells.clear()
+        self.app.target_shape_points = [(10, 8), (10, 9), (10, 10), (10, 11), (10, 12)]
+        self.app._rebuild_target_shape_cells()
+        self.assertEqual(len(self.app.plan_path()), 5)
+
+        self.app.target_shape_points = [(10, 8), (10, 9), (10, 10), (10, 11), (10, 12), (10, 13)]
+        self.app._rebuild_target_shape_cells()
+        self.assertEqual(self.app.plan_path(), [])
+
     def test_merge_operation_is_named_mixing(self):
         self.assertEqual(self.app.OP_MERGE, "混合")
         self.app.operation_var.set(self.app.OP_MERGE)

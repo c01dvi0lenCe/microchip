@@ -20,10 +20,12 @@ from dmf_simulation import (
     ELECTRODE_PITCH_MM,
     GRID_COLS,
     GRID_ROWS,
+    INITIAL_DROPLET_CAPACITY,
     LAYOUT_CELLS,
     MultiDropletAssignment,
     RESERVOIR_CELLS,
     RESERVOIR_CONNECTIONS,
+    RESERVOIR_DROPLET_CAPACITY,
     SIDE_RESERVOIR_LARGE,
     SIDE_RESERVOIR_SMALL,
     SimulatedCamera,
@@ -2579,12 +2581,20 @@ class STM32MatrixController:
             return self._handle_plan_failed("多液滴规划失败：请先设置加样储液池或阵列初始液滴")
         if not self.target_shape_cells:
             return self._handle_plan_failed("多液滴规划失败：请先在中间阵列设置目标电极")
+        source_capacity = self._multi_source_capacities()
+        total_capacity = sum(source_capacity.values())
+        if total_capacity < len(self.target_shape_cells):
+            return self._handle_plan_failed(
+                "多液滴规划失败：目标电极数量超过可用液滴数；"
+                f"当前可用 {total_capacity} 滴，目标 {len(self.target_shape_cells)} 个"
+            )
 
         assignments = build_multi_droplet_assignments(
             multi_sources,
             self.target_shape_cells,
             self.planner,
             self._routing_obstacles(*multi_sources, *self.target_shape_cells),
+            source_capacity=source_capacity,
         )
         if not assignments:
             return self._handle_plan_failed("多液滴规划失败：目标电极存在无法避碰的路径")
@@ -2618,6 +2628,14 @@ class STM32MatrixController:
 
     def _multi_source_cells(self):
         return set(self.loaded_reservoirs) | set(self.initial_droplet_cells)
+
+    def _multi_source_capacities(self):
+        capacities = {}
+        for cell in self.loaded_reservoirs:
+            capacities[cell] = RESERVOIR_DROPLET_CAPACITY
+        for cell in self.initial_droplet_cells:
+            capacities[cell] = capacities.get(cell, 0) + INITIAL_DROPLET_CAPACITY
+        return capacities
 
     def _target_merge_regions(self):
         targets = set(self.multi_targets or self.target_shape_cells)
@@ -3432,7 +3450,10 @@ class STM32MatrixController:
             if start_cell is not None:
                 droplet.reset(start_cell)
                 self.multi_droplet_visible.append(True)
-                self.log(f"D{assignment.droplet_id} 从 {self._cell_label(assignment.source)} 分裂出滴")
+                if is_reservoir_cell(assignment.source):
+                    self.log(f"D{assignment.droplet_id} 从储液池 {self._cell_label(assignment.source)} 准备出滴")
+                else:
+                    self.log(f"D{assignment.droplet_id} 初始液滴位于 {self._cell_label(assignment.source)}")
             else:
                 droplet.reset(assignment.source)
                 self.multi_droplet_visible.append(False)
@@ -3550,7 +3571,7 @@ class STM32MatrixController:
                             f"D{assignment.droplet_id} 已从 {self._cell_label(assignment.source)} 形成单滴并进入调度",
                             force=True,
                         )
-                        self.log(f"D{assignment.droplet_id} 从 {self._cell_label(assignment.source)} 分裂出滴")
+                        self.log(f"D{assignment.droplet_id} 从储液池 {self._cell_label(assignment.source)} 出滴")
             self.multi_step_index = next_step
             self.multi_step_start_time = now
             self._set_auto_active_cells(self._multi_active_cells_for_phase(self.multi_step_index, 0.0))
