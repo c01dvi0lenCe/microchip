@@ -574,6 +574,35 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertEqual(planned, self.app.path)
 
+    def test_single_debug_step_activates_arrived_cell_not_next_target(self):
+        self.app.operation_var.set(self.app.OP_MOVE)
+        self.app.path = [(3, 3), (3, 4), (3, 5)]
+        self.app.operation_paths = [self.app.path]
+        self.app.path_index = 0
+
+        changed = self.app._debug_step_single_path(1)
+
+        self.assertTrue(changed)
+        self.assertEqual(self.app.sim_droplet.cell, (3, 4))
+        self.assertEqual(self.app.active_auto_cells, {(3, 4)})
+        self.assertNotIn((3, 5), self.app.active_auto_cells)
+
+    def test_multi_debug_step_activates_arrived_cells_not_next_targets(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 0), (0, 2), [(0, 0), (0, 1), (0, 2)], [(0, 0), (0, 1), (0, 2)]),
+            MultiDropletAssignment(2, (2, 0), (2, 2), [(2, 0), (2, 1), (2, 2)], [(2, 0), (2, 1), (2, 2)]),
+        ]
+        self.app.multi_step_index = 0
+
+        changed = self.app._debug_step_multi(1)
+
+        self.assertTrue(changed)
+        self.assertEqual([droplet.cell for droplet in self.app.sim_droplets], [(0, 1), (2, 1)])
+        self.assertEqual(self.app.active_auto_cells, {(0, 1), (2, 1)})
+        self.assertNotIn((0, 2), self.app.active_auto_cells)
+        self.assertNotIn((2, 2), self.app.active_auto_cells)
+
     def test_loop_clear_target_buttons_clear_loop_path_points(self):
         self.app.operation_var.set(self.app.OP_LOOP)
         self.app.start_cell = (2, 2)

@@ -3205,8 +3205,7 @@ class STM32MatrixController:
             else current
         )
         self.current_target_cell_b = None
-        active = {self.current_target_cell} if self.current_target_cell is not None else {current}
-        self._set_auto_active_cells(active)
+        self._set_auto_active_cells({current})
         self.log(
             f"四宫格混合调试{'步进' if direction > 0 else '回退'}："
             f"{self.mixing_index}/{len(self.mixing_path) - 1}，"
@@ -3271,7 +3270,7 @@ class STM32MatrixController:
             else:
                 self.sim_droplets[idx].reset(cell)
                 self.multi_droplet_visible.append(True)
-        self._set_auto_active_cells(self._multi_active_cells_for_phase(self.multi_step_index, 0.0))
+        self._set_auto_active_cells(self._scheduled_active_cells_for_assignments(self.multi_assignments, self.multi_step_index))
         self.log(f"多液滴调试{'步进' if direction > 0 else '回退'}：{self.multi_step_index}/{max_steps - 1}")
         return True
 
@@ -3298,7 +3297,7 @@ class STM32MatrixController:
                 droplet.reset(cell)
                 self.multi_droplet_visible.append(True)
             self.sim_droplets.append(droplet)
-        self._set_auto_active_cells(self._loop_active_cells_for_phase(self.multi_step_index, 0.0))
+        self._set_auto_active_cells(self._scheduled_active_cells_for_assignments(self.loop_assignments, self.multi_step_index))
         self.log(f"多液滴循环调试{'步进' if direction > 0 else '回退'}：{self.multi_step_index}/{max_steps - 1}")
         return True
 
@@ -3321,9 +3320,15 @@ class STM32MatrixController:
     def _debug_single_active_for_path(path, index):
         if not path:
             return set()
-        if index < len(path) - 1:
-            return {path[index + 1]}
         return {path[index]}
+
+    def _scheduled_active_cells_for_assignments(self, assignments, step):
+        return {
+            cell
+            for assignment in assignments
+            for cell in (self._scheduled_cell_at(assignment.scheduled_path, step),)
+            if cell is not None
+        }
 
     def simulate_detection_dropout(self):
         self.drop_frame_until = time.monotonic() + 0.8
