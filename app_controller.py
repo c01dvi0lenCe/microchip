@@ -70,7 +70,7 @@ class STM32MatrixController:
     TOOL_SPLIT_LEFT = "设置左子滴"
     TOOL_SPLIT_RIGHT = "设置右子滴"
     TOOL_SPLIT_DIRECTION = "设置分裂方向"
-    TOOL_MULTI_LOAD = "设置加样"
+    TOOL_MULTI_LOAD = "设置储液池"
     TOOL_MULTI_INITIAL = "设置初始液滴"
     TOOL_MULTI_SHAPE = "设置目标电极"
     TOOL_LOOP_START = "设置循环液滴"
@@ -160,6 +160,7 @@ class STM32MatrixController:
         self.multi_step_index = 0
         self.multi_step_start_time = 0.0
         self.multi_step_duration_s = 0.85
+        self.last_plan_error = ""
         self.debug_tests_visible = False
         self.manual_droplet = None
         self.manual_droplets = []
@@ -268,7 +269,7 @@ class STM32MatrixController:
         self.root.bind("<Control-Z>", self.on_undo_shortcut)
 
     def _configure_window(self):
-        self.root.title(f"STM32 微流控 {self.rows}x{self.cols} 视觉闭环仿真上位机")
+        self.root.title(f"数字微流控视觉平台 - {self.rows}x{self.cols} 仿真上位机")
         self.root.geometry("1360x820")
         self.root.minsize(1180, 760)
         self.root.resizable(True, True)
@@ -296,17 +297,7 @@ class STM32MatrixController:
         left_panel = tk.Frame(self.main_splitter, bg=self.colors["bg"])
         left_panel.pack(fill="both", expand=True)
 
-        left_splitter = tk.PanedWindow(
-            left_panel,
-            orient="vertical",
-            bg=self.colors["bg"],
-            sashwidth=6,
-            sashrelief="flat",
-            bd=0,
-        )
-        left_splitter.pack(fill="both", expand=True)
-
-        self.main_notebook = ttk.Notebook(left_splitter)
+        self.main_notebook = ttk.Notebook(left_panel)
         manual_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         auto_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         self.main_notebook.add(manual_page, text="手动电极")
@@ -332,13 +323,26 @@ class STM32MatrixController:
         self.matrix_canvases = [self.manual_canvas, self.path_canvas]
         self.matrix_canvas = self.manual_canvas
 
-        self.log_card = self._build_log_card(left_splitter)
-        left_splitter.add(self.main_notebook, minsize=560, stretch="always")
-        left_splitter.add(self.log_card, minsize=110, stretch="always")
+        self.main_notebook.pack(fill="both", expand=True)
 
-        self.camera_card = self._build_camera_card(self.main_splitter)
+        right_panel = tk.Frame(self.main_splitter, bg=self.colors["bg"])
+        self.right_splitter = tk.PanedWindow(
+            right_panel,
+            orient="vertical",
+            bg=self.colors["bg"],
+            sashwidth=6,
+            sashrelief="flat",
+            bd=0,
+        )
+        self.right_splitter.pack(fill="both", expand=True)
+
+        self.camera_card = self._build_camera_card(self.right_splitter)
+        self.log_card = self._build_log_card(self.right_splitter)
+        self.right_splitter.add(self.camera_card, minsize=430, stretch="always")
+        self.right_splitter.add(self.log_card, minsize=150, stretch="always")
+
         self.main_splitter.add(left_panel, minsize=740, stretch="always")
-        self.main_splitter.add(self.camera_card, minsize=460, stretch="always")
+        self.main_splitter.add(right_panel, minsize=460, stretch="always")
         self.root.after(120, self._set_default_sash)
 
     def _set_default_sash(self):
@@ -354,13 +358,14 @@ class STM32MatrixController:
         left = tk.Frame(header, bg=self.colors["header_bg"])
         left.pack(side="left", fill="y", padx=14)
 
-        tk.Label(
+        self.title_label = tk.Label(
             left,
-            text="微流控视觉闭环控制台",
+            text="数字微流控视觉平台",
             bg=self.colors["header_bg"],
             fg=self.colors["header_text"],
             font=(self.font_family, 14, "bold"),
-        ).pack(anchor="w", pady=(11, 0))
+        )
+        self.title_label.pack(anchor="w", pady=(11, 0))
 
         self.connection_badge = tk.Label(
             header,
@@ -573,6 +578,15 @@ class STM32MatrixController:
         )
         self.fault_mode_combobox.pack(side="left", padx=(6, 10))
 
+        self.btn_sim_param_help = self._make_button(
+            sim_param_row,
+            "参数说明",
+            self.show_simulation_parameter_help,
+            self.colors["btn_off"],
+            self.colors["text"],
+        )
+        self.btn_sim_param_help.pack(side="left", padx=(0, 10))
+
         self.metrics_label = tk.Label(
             sim_param_row,
             text="指标: 0 步 / 0 次重规划",
@@ -618,14 +632,14 @@ class STM32MatrixController:
         self.cleanup_row = tk.Frame(card, bg=self.colors["panel"])
         self.cleanup_row.pack(fill="x", padx=10, pady=(0, 8))
 
-        tk.Label(self.cleanup_row, text="目标/加样清理", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
+        tk.Label(self.cleanup_row, text="目标/储液池清理", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
         self.btn_undo_shape = self._make_button(self.cleanup_row, "撤销目标", self.undo_target_shape, self.colors["btn_off"], self.colors["text"])
         self.btn_undo_shape.pack(side="left", padx=(6, 0))
 
         self.btn_clear_shape = self._make_button(self.cleanup_row, "清空目标", self.clear_target_shape, self.colors["btn_off"], self.colors["text"])
         self.btn_clear_shape.pack(side="left", padx=(6, 0))
 
-        self.btn_clear_load = self._make_button(self.cleanup_row, "清空加样", self.clear_loaded_reservoirs, self.colors["btn_off"], self.colors["text"])
+        self.btn_clear_load = self._make_button(self.cleanup_row, "清空储液池", self.clear_loaded_reservoirs, self.colors["btn_off"], self.colors["text"])
         self.btn_clear_load.pack(side="left", padx=(6, 0))
 
         self.btn_clear_initial = self._make_button(self.cleanup_row, "清空初始", self.clear_initial_droplets, self.colors["btn_off"], self.colors["text"])
@@ -633,6 +647,21 @@ class STM32MatrixController:
 
         self.btn_clear_obstacles = self._make_button(self.cleanup_row, "清空障碍", self.clear_obstacles, self.colors["btn_off"], self.colors["text"])
         self.btn_clear_obstacles.pack(side="left", padx=(6, 0))
+
+    def _simulation_parameter_help_text(self):
+        return (
+            "运动真实度：控制液滴单步响应时间、随机偏移、过冲和卡滞概率；"
+            "理想用于功能演示，常规接近真实实验，困难用于压力测试。\n"
+            "视觉噪声：模拟相机检测丢帧、质心抖动、低对比和强反光；"
+            "关闭用于调试，轻微/强噪声用于验证闭环鲁棒性。\n"
+            "故障模式：无表示正常电极；随机卡滞会让部分步进变慢或卡住；"
+            "指定弱故障电极会把你设置的障碍/弱故障区域用于纠偏测试。\n"
+            "异常保护：检测到丢滴、疑似融合、跑偏或无法安全调度时，系统保持当前安全电极，"
+            "停止自动推进，等待复位、回退或重新规划。"
+        )
+
+    def show_simulation_parameter_help(self):
+        messagebox.showinfo("仿真参数说明", self._simulation_parameter_help_text())
 
     def toggle_debug_tests(self):
         self.debug_tests_visible = not self.debug_tests_visible
@@ -863,7 +892,7 @@ class STM32MatrixController:
                 ("路径", self.colors["path"], self.colors["text"]),
                 ("障碍", self.colors["obstacle"], "white"),
                 ("储液池", self.colors["reservoir"], self.colors["text"]),
-                ("加样", self.colors["reservoir_loaded"], self.colors["text"]),
+                ("有液池", self.colors["reservoir_loaded"], self.colors["text"]),
                 ("初始滴", self.colors["initial_droplet"], "white"),
                 ("目标", self.colors["target_sample"], self.colors["text"]),
                 ("激活", self.colors["btn_on"], "white"),
@@ -2123,7 +2152,7 @@ class STM32MatrixController:
                 self.log(f"障碍物已添加 -> {self._cell_label(cell)}")
         elif tool == self.TOOL_MULTI_LOAD:
             if not is_reservoir_cell(cell):
-                self.log("设置加样时请点击四周储液池")
+                self.log("设置储液池时请点击四周储液池")
                 return
             self._push_undo_snapshot()
             self._clear_planned_operation()
@@ -2132,7 +2161,7 @@ class STM32MatrixController:
                 self.log(f"储液池已设为空 -> {self._cell_label(cell)}")
             else:
                 self.loaded_reservoirs.add(cell)
-                self.log(f"储液池已加样 -> {self._cell_label(cell)}")
+                self.log(f"储液池已设为有液 -> {self._cell_label(cell)}")
             self._reset_droplets_for_operation()
         elif tool == self.TOOL_MULTI_INITIAL:
             row, col = cell
@@ -2562,6 +2591,7 @@ class STM32MatrixController:
 
     def plan_path(self, reset_droplet=False):
         operation = self.operation_var.get()
+        self.last_plan_error = ""
         if reset_droplet:
             self._reset_droplets_for_operation()
 
@@ -2578,9 +2608,18 @@ class STM32MatrixController:
     def _plan_multi_paths(self):
         multi_sources = self._multi_source_cells()
         if not multi_sources:
-            return self._handle_plan_failed("多液滴规划失败：请先设置加样储液池或阵列初始液滴")
+            return self._handle_plan_failed("多液滴规划失败：请先设置储液池或阵列初始液滴")
         if not self.target_shape_cells:
             return self._handle_plan_failed("多液滴规划失败：请先在中间阵列设置目标电极")
+        if (
+            not self.loaded_reservoirs
+            and self.initial_droplet_cells
+            and len(self.target_shape_cells) != len(self.initial_droplet_cells)
+        ):
+            return self._handle_plan_failed(
+                "多液滴规划失败：未设置储液池时，目标电极数量必须等于初始液滴数量；"
+                f"当前初始液滴 {len(self.initial_droplet_cells)} 滴，目标 {len(self.target_shape_cells)} 个"
+            )
         source_capacity = self._multi_source_capacities()
         total_capacity = sum(source_capacity.values())
         if total_capacity < len(self.target_shape_cells):
@@ -2805,6 +2844,7 @@ class STM32MatrixController:
         return self.operation_paths
 
     def _handle_plan_failed(self, message):
+        self.last_plan_error = message
         self.path = []
         self.merge_path_b = []
         self.operation_paths = []
@@ -3319,15 +3359,15 @@ class STM32MatrixController:
 
     def clear_loaded_reservoirs(self):
         if self.auto_running:
-            self.stop_auto_control("清空加样储液池")
+            self.stop_auto_control("清空储液池")
         if not self.loaded_reservoirs:
-            self.log("加样储液池已为空")
+            self.log("储液池已为空")
             return
         self._push_undo_snapshot()
         self._clear_planned_operation()
         self.loaded_reservoirs.clear()
         self._reset_droplets_for_operation()
-        self.log("加样储液池已清空")
+        self.log("储液池已清空")
         self._draw_matrix_canvas()
         self._render_sim_camera_frame()
 
@@ -3734,10 +3774,12 @@ class STM32MatrixController:
         self._set_auto_active_cells(valid_hold)
         self.current_target_cell = None
         self.current_target_cell_b = None
-        self.auto_status_label.config(text="闭环: 异常保护", fg=self.colors["danger"])
         if valid_hold:
             hold_text = " / ".join(self._cell_label(cell) for cell in sorted(valid_hold))
+            self.auto_status_label.config(text=f"闭环: 保护暂停，保持安全电极 {hold_text}", fg=self.colors["danger"])
             self.log_feedback("异常保护", f"保持电极：{hold_text}", force=True)
+        else:
+            self.auto_status_label.config(text="闭环: 保护暂停，等待人工复位或重新规划", fg=self.colors["danger"])
         self.log(reason)
         self._draw_matrix_canvas()
 

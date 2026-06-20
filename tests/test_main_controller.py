@@ -31,6 +31,32 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertEqual(tabs[:2], ["手动电极", "自动化路径规划"])
         self.assertEqual(self.app.main_notebook.tab(self.app.main_notebook.select(), "text"), "手动电极")
 
+    def test_window_uses_digital_microfluidics_visual_platform_name(self):
+        self.assertIn("数字微流控视觉平台", self.root.title())
+        self.assertEqual(self.app.title_label.cget("text"), "数字微流控视觉平台")
+
+    def test_log_card_is_below_visual_feedback_on_right_side(self):
+        panes = [str(pane) for pane in self.app.right_splitter.panes()]
+
+        self.assertEqual(panes, [str(self.app.camera_card), str(self.app.log_card)])
+
+    def test_simulation_parameter_help_explains_controls(self):
+        help_text = self.app._simulation_parameter_help_text()
+
+        self.assertIn("运动真实度", help_text)
+        self.assertIn("视觉噪声", help_text)
+        self.assertIn("故障模式", help_text)
+        self.assertIn("异常保护", help_text)
+
+    def test_multi_operation_uses_reservoir_wording_not_loading_wording(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app._update_tool_options()
+
+        self.assertEqual(self.app.TOOL_MULTI_LOAD, "设置储液池")
+        self.assertIn("设置储液池", self.app._tool_options_for_operation())
+        self.assertNotIn("设置加样", self.app._tool_options_for_operation())
+        self.assertEqual(self.app.btn_clear_load.cget("text"), "清空储液池")
+
     def test_obstacle_tool_is_available_only_for_automatic_planning(self):
         self.assertIn(self.app.TOOL_OBSTACLE, self.app._tool_options_for_operation())
         self.assertNotIn(self.app.TOOL_MANUAL, self.app._tool_options_for_operation())
@@ -69,6 +95,21 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertEqual(assignments, [])
         self.assertEqual(self.app.multi_assignments, [])
+
+    def test_initial_only_multi_planning_requires_target_count_match(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app._update_tool_options()
+        self.app.loaded_reservoirs.clear()
+        self.app.initial_droplet_cells = {(4, 4), (6, 6)}
+        self.app.target_shape_points = [(4, 8)]
+        self.app._rebuild_target_shape_cells()
+
+        assignments = self.app.plan_path()
+
+        self.assertEqual(assignments, [])
+        self.assertIn("未设置储液池", self.app.last_plan_error)
+        self.assertIn("初始液滴 2 滴", self.app.last_plan_error)
+        self.assertIn("目标 1 个", self.app.last_plan_error)
 
     def test_loaded_reservoir_can_fill_at_most_five_multi_targets(self):
         self.app.operation_var.set(self.app.OP_MULTI)
@@ -112,6 +153,12 @@ class MainControllerLayoutTests(unittest.TestCase):
     def test_debug_fault_tests_are_hidden_by_default(self):
         self.assertFalse(self.app.debug_tests_visible)
         self.assertEqual(self.app.debug_test_row.winfo_manager(), "")
+
+    def test_multi_protection_status_explains_safe_hold(self):
+        self.app._pause_multi_with_hold("视觉检测到 1/2 滴，疑似融合或遮挡", {(2, 3)})
+
+        self.assertIn("保护暂停", self.app.auto_status_label.cget("text"))
+        self.assertIn("保持安全电极", self.app.auto_status_label.cget("text"))
 
     def test_manual_canvas_is_marked_manual_view(self):
         self.assertTrue(self.app._is_manual_canvas(self.app.manual_canvas))
