@@ -335,6 +335,7 @@ def schedule_multi_paths(
     min_start_delay: int = 0,
     merge_cells: Iterable[Cell] = (),
     merge_regions: Optional[Mapping[Cell, int]] = None,
+    allow_settled_goal_adjacency: bool = False,
 ) -> list[list[Optional[Cell]]]:
     scheduled_paths: list[list[Optional[Cell]]] = [list(path) for path in existing_paths]
     new_schedules: list[list[Optional[Cell]]] = []
@@ -342,7 +343,14 @@ def schedule_multi_paths(
     for path in paths:
         if not path:
             return []
-        scheduled = _schedule_one_multi_path(path, scheduled_paths, max_wait_steps, min_start_delay, region_map)
+        scheduled = _schedule_one_multi_path(
+            path,
+            scheduled_paths,
+            max_wait_steps,
+            min_start_delay,
+            region_map,
+            allow_settled_goal_adjacency=allow_settled_goal_adjacency,
+        )
         if not scheduled:
             return []
         scheduled_paths.append(scheduled)
@@ -356,6 +364,7 @@ def _schedule_one_multi_path(
     max_wait_steps: int,
     min_start_delay: int = 0,
     merge_regions: Optional[Mapping[Cell, int]] = None,
+    allow_settled_goal_adjacency: bool = False,
 ) -> list[Optional[Cell]]:
     own_goal = path[-1]
     region_map = dict(merge_regions or {})
@@ -368,11 +377,27 @@ def _schedule_one_multi_path(
             step = len(scheduled)
             previous_cell = scheduled[-1] if scheduled else None
             candidate_cell = path[path_index]
-            if _multi_step_conflicts(existing_paths, previous_cell, candidate_cell, step, own_goal, region_map):
+            if _multi_step_conflicts(
+                existing_paths,
+                previous_cell,
+                candidate_cell,
+                step,
+                own_goal,
+                region_map,
+                allow_settled_goal_adjacency=allow_settled_goal_adjacency,
+            ):
                 if previous_cell is None:
                     failed = True
                     break
-                if _multi_step_conflicts(existing_paths, previous_cell, previous_cell, step, own_goal, region_map):
+                if _multi_step_conflicts(
+                    existing_paths,
+                    previous_cell,
+                    previous_cell,
+                    step,
+                    own_goal,
+                    region_map,
+                    allow_settled_goal_adjacency=allow_settled_goal_adjacency,
+                ):
                     failed = True
                     break
                 scheduled.append(previous_cell)
@@ -395,6 +420,7 @@ def schedule_multi_paths_by_contamination_groups(
     max_wait_steps: int = 220,
     merge_cells: Iterable[Cell] = (),
     merge_regions: Optional[Mapping[Cell, int]] = None,
+    allow_settled_goal_adjacency: bool = False,
 ) -> tuple[list[list[Optional[Cell]]], list[int]]:
     path_list = list(paths)
     group_list = list(group_ids)
@@ -426,6 +452,7 @@ def schedule_multi_paths_by_contamination_groups(
             max_wait_steps=max_wait_steps,
             min_start_delay=state["start"],
             merge_regions=region_map,
+            allow_settled_goal_adjacency=allow_settled_goal_adjacency,
         )
         if not scheduled:
             return [], []
@@ -446,6 +473,7 @@ def schedule_multi_paths_in_rounds(
     max_parallel: int = 4,
     max_wait_steps: int = 220,
     merge_cells: Iterable[Cell] = (),
+    allow_settled_goal_adjacency: bool = False,
 ) -> tuple[list[list[Optional[Cell]]], list[int]]:
     path_list = list(paths)
     merge_regions = target_merge_region_map(merge_cells)
@@ -456,6 +484,7 @@ def schedule_multi_paths_in_rounds(
         max_parallel=max_parallel,
         max_wait_steps=max_wait_steps,
         merge_regions=merge_regions,
+        allow_settled_goal_adjacency=allow_settled_goal_adjacency,
     )
 
 
@@ -483,6 +512,7 @@ def build_multi_droplet_assignments(
         group_ids,
         max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
         merge_regions=merge_regions,
+        allow_settled_goal_adjacency=True,
     )
     if len(scheduled_paths) != len(raw_assignments):
         return []
@@ -507,6 +537,7 @@ def _multi_step_conflicts(
     step: int,
     own_goal: Cell,
     merge_regions: Mapping[Cell, int],
+    allow_settled_goal_adjacency: bool = False,
 ) -> bool:
     if candidate_cell is None:
         return False
@@ -521,6 +552,7 @@ def _multi_step_conflicts(
         own_region = merge_regions.get(own_goal)
         in_same_merge_region = candidate_region is not None and candidate_region == other_region
         approaching_merge_region = own_region is not None and own_region == other_region
+        other_is_settled_goal = allow_settled_goal_adjacency and other_goal is not None and other_now == other_goal == other_prev
         if candidate_cell == other_now:
             return not (in_same_merge_region or approaching_merge_region)
         if in_pull_risk_zone(candidate_cell, other_now):
@@ -528,6 +560,7 @@ def _multi_step_conflicts(
                 in_same_merge_region
                 or approaching_merge_region
                 or (candidate_cell == own_goal and other_now == other_goal)
+                or other_is_settled_goal
             ):
                 return True
         if previous_cell is not None and other_prev is not None and previous_cell == other_now and candidate_cell == other_prev:

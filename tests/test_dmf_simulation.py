@@ -378,6 +378,36 @@ class DmfSimulationTests(unittest.TestCase):
                 moving_at_first_step += 1
         self.assertEqual(moving_at_first_step, len(targets))
 
+    def test_sparse_letter_shape_targets_are_planned_with_staggered_source_emission(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, 22), (13, 22), (22, 6), (22, 13)]
+        c_shape = [(6, col) for col in (2, 4, 6)] + [(14, col) for col in (2, 4, 6)] + [(row, 2) for row in (8, 10, 12)]
+        s_shape = (
+            [(6, col) for col in (8, 10, 12)]
+            + [(10, col) for col in (8, 10, 12)]
+            + [(14, col) for col in (8, 10, 12)]
+            + [(8, 8), (12, 12)]
+        )
+        e_shape = (
+            [(6, col) for col in (14, 16, 18)]
+            + [(10, col) for col in (14, 16, 18)]
+            + [(14, col) for col in (14, 16, 18)]
+            + [(8, 14), (12, 14)]
+        )
+        targets = c_shape + s_shape + e_shape
+
+        assignments = build_multi_droplet_assignments(sources, targets, planner)
+
+        self.assertEqual(len(assignments), len(set(targets)))
+        self.assertEqual({assignment.target for assignment in assignments}, set(targets))
+        starts_by_source = {}
+        for assignment in assignments:
+            start_step = next(step for step, cell in enumerate(assignment.scheduled_path) if cell is not None)
+            starts_by_source.setdefault(assignment.source, []).append(start_step)
+        self.assertTrue(any(start > 0 for starts in starts_by_source.values() for start in starts))
+        for starts in starts_by_source.values():
+            self.assertEqual(len(starts), len(set(starts)))
+
     def test_multi_scheduler_allows_same_cell_at_different_times(self):
         paths = [
             [(0, 0), (0, 1), (0, 2), (0, 3)],
