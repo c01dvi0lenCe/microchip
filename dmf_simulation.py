@@ -23,7 +23,7 @@ ELECTRODE_PITCH_MM = 3.2
 BOARD_FRAME_MM = 100.0
 INITIAL_DROPLET_CAPACITY = 1
 RESERVOIR_DROPLET_CAPACITY = 5
-MAX_PARALLEL_MULTI_DROPLETS = 4
+MAX_PARALLEL_MULTI_DROPLETS = GRID_ROWS * GRID_COLS
 CAMERA_LAYOUT_PADDING_CELLS = 5.4
 DROPLET_DETECTION_RGB = (
     (24, 82, 194),
@@ -54,6 +54,8 @@ SIDE_RESERVOIR_LARGE = frozenset(
     | {(row, GRID_COLS + 2) for row in SIDE_RESERVOIR_ROWS}
 )
 RESERVOIR_CELLS = frozenset(CORNER_RESERVOIRS | SIDE_RESERVOIR_SMALL | SIDE_RESERVOIR_LARGE)
+WASTE_RESERVOIRS = CORNER_RESERVOIRS
+DISPENSE_RESERVOIRS = frozenset(RESERVOIR_CELLS - WASTE_RESERVOIRS)
 CORE_CELLS = frozenset((row, col) for row in range(GRID_ROWS) for col in range(GRID_COLS))
 LAYOUT_CELLS = frozenset(CORE_CELLS | RESERVOIR_CELLS)
 RESERVOIR_ID_BY_CELL = {
@@ -146,6 +148,14 @@ def is_reservoir_cell(cell: Cell) -> bool:
     return cell in RESERVOIR_CELLS
 
 
+def is_waste_reservoir_cell(cell: Cell) -> bool:
+    return cell in WASTE_RESERVOIRS
+
+
+def is_dispense_reservoir_cell(cell: Cell) -> bool:
+    return cell in DISPENSE_RESERVOIRS
+
+
 def is_core_cell(cell: Cell, rows: int = GRID_ROWS, cols: int = GRID_COLS) -> bool:
     row, col = cell
     return 0 <= row < rows and 0 <= col < cols
@@ -236,7 +246,10 @@ def assign_sources_to_targets(
     obstacles: Iterable[Cell] = (),
     source_capacity: Optional[Mapping[Cell, int]] = None,
 ) -> list[tuple[Cell, Cell, list[Cell]]]:
-    source_list = sorted(set(sources), key=lambda cell: electrode_id(cell[0], cell[1]))
+    source_list = sorted(
+        {source for source in sources if not is_waste_reservoir_cell(source)},
+        key=lambda cell: electrode_id(cell[0], cell[1]),
+    )
     target_list = _unique_cells(targets)
     obstacles_set = set(obstacles)
     if not source_list or not target_list:
@@ -255,11 +268,9 @@ def assign_sources_to_targets(
             path = planner.plan(source, target, obstacles_set - {source, target})
             if not path:
                 continue
-            pull_priority = _source_pull_priority(source, remaining_capacity)
             candidate = (
-                len(path) * 2 - pull_priority,
                 len(path),
-                -pull_priority,
+                -remaining_capacity.get(source, 0),
                 electrode_id(source[0], source[1]),
                 source,
                 path,
@@ -268,17 +279,63 @@ def assign_sources_to_targets(
                 best = candidate
         if best is None:
             return []
-        _, _, _, _, source, path = best
+        _, _, _, source, path = best
         remaining_capacity[source] -= 1
         assignments.append((source, target, path))
     return sorted(assignments, key=lambda item: (electrode_id(item[0][0], item[0][1]), -len(item[2]), item[1]))
 
 
-def _source_pull_priority(source: Cell, remaining_capacity: Mapping[Cell, int]) -> int:
-    remaining = remaining_capacity.get(source, 0)
-    if is_reservoir_cell(source):
-        return remaining
-    return RESERVOIR_DROPLET_CAPACITY + remaining
+def order_assignments_by_transport_dependencies(
+    assignments: Iterable[tuple[Cell, Cell, list[Cell]]],
+    merge_regions: Mapping[Cell, int],
+) -> list[tuple[Cell, Cell, list[Cell]]]:
+    assignment_list = list(assignments)
+    count = len(assignment_list)
+    if count <= 1:
+        return assignment_list
+
+    edges: list[set[int]] = [set() for _ in range(count)]
+    indegree = [0] * count
+    for idx, (_, own_target, path) in enumerate(assignment_list):
+        for other_idx, (_, other_target, _) in enumerate(assignment_list):
+            if idx == other_idx:
+                continue
+            if _path_needs_target_clear_before_parking(path, own_target, other_target, merge_regions):
+                if other_idx not in edges[idx]:
+                    edges[idx].add(other_idx)
+                    indegree[other_idx] += 1
+
+    ready = [(-len(edges[idx]), idx) for idx, degree in enumerate(indegree) if degree == 0]
+    heapq.heapify(ready)
+    ordered_indices: list[int] = []
+    while ready:
+        _, idx = heapq.heappop(ready)
+        ordered_indices.append(idx)
+        for other_idx in sorted(edges[idx]):
+            indegree[other_idx] -= 1
+            if indegree[other_idx] == 0:
+                heapq.heappush(ready, (-len(edges[other_idx]), other_idx))
+
+    if len(ordered_indices) < count:
+        remaining = [idx for idx in range(count) if idx not in set(ordered_indices)]
+        remaining.sort(key=lambda idx: (-len(edges[idx]), indegree[idx], -len(assignment_list[idx][2]), idx))
+        ordered_indices.extend(remaining)
+
+    return [assignment_list[idx] for idx in ordered_indices]
+
+
+def _path_needs_target_clear_before_parking(
+    path: list[Cell],
+    own_target: Cell,
+    other_target: Cell,
+    merge_regions: Mapping[Cell, int],
+) -> bool:
+    if own_target == other_target or _same_merge_region(own_target, other_target, merge_regions):
+        return False
+    for cell in path[:-1]:
+        if cell == other_target or in_pull_risk_zone(cell, other_target):
+            return True
+    return False
 
 
 def _source_capacity_map(
@@ -287,6 +344,9 @@ def _source_capacity_map(
 ) -> dict[Cell, int]:
     capacity: dict[Cell, int] = {}
     for source in sources:
+        if is_waste_reservoir_cell(source):
+            capacity[source] = 0
+            continue
         if source_capacity is not None:
             value = source_capacity.get(source, 0)
         elif is_reservoir_cell(source):
@@ -325,6 +385,29 @@ def target_merge_region_map(cells: Iterable[Cell]) -> dict[Cell, int]:
                 remaining.remove(nxt)
                 regions[nxt] = region_id
                 stack.append(nxt)
+    return regions
+
+
+def target_proximity_region_map(cells: Iterable[Cell], max_gap: int = 2) -> dict[Cell, int]:
+    remaining = set(cells)
+    regions: dict[Cell, int] = {}
+    region_id = 0
+    while remaining:
+        region_id += 1
+        start = remaining.pop()
+        regions[start] = region_id
+        stack = [start]
+        while stack:
+            row, col = stack.pop()
+            linked = [
+                cell
+                for cell in remaining
+                if max(abs(cell[0] - row), abs(cell[1] - col)) <= max_gap
+            ]
+            for cell in linked:
+                remaining.remove(cell)
+                regions[cell] = region_id
+                stack.append(cell)
     return regions
 
 
@@ -488,6 +571,291 @@ def schedule_multi_paths_in_rounds(
     )
 
 
+def schedule_assignments_with_reroute(
+    assignments: Iterable[tuple[Cell, Cell, list[Cell]]],
+    planner: "AStarPlanner",
+    obstacles: Iterable[Cell],
+    merge_regions: Mapping[Cell, int],
+    max_parallel: int = MAX_PARALLEL_MULTI_DROPLETS,
+    max_wait_steps: int = 80,
+) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
+    assignment_list = list(assignments)
+    if not assignment_list:
+        return [], [], []
+
+    result = _schedule_assignments_with_reroute_core(
+        assignment_list,
+        planner,
+        obstacles,
+        merge_regions,
+        max_parallel,
+        max_wait_steps,
+    )
+    if result[0]:
+        return result
+
+    return _schedule_assignments_in_fill_batches(
+        assignment_list,
+        planner,
+        obstacles,
+        merge_regions,
+        max_parallel,
+        max_wait_steps,
+    )
+
+
+def _schedule_assignments_in_fill_batches(
+    assignments: Iterable[tuple[Cell, Cell, list[Cell]]],
+    planner: "AStarPlanner",
+    obstacles: Iterable[Cell],
+    merge_regions: Mapping[Cell, int],
+    max_parallel: int,
+    max_wait_steps: int,
+) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
+    assignment_list = list(assignments)
+    if not assignment_list:
+        return [], [], []
+
+    max_parallel = max(1, max_parallel)
+    max_wait_steps = max(max_wait_steps, 220)
+    base_obstacles = set(obstacles)
+    pending_targets = [target for _source, target, _path in assignment_list]
+    source_capacity: dict[Cell, int] = {}
+    for source, _target, _path in assignment_list:
+        if is_reservoir_cell(source):
+            source_capacity[source] = RESERVOIR_DROPLET_CAPACITY
+        else:
+            source_capacity[source] = source_capacity.get(source, 0) + INITIAL_DROPLET_CAPACITY
+    sources = sorted(source_capacity, key=lambda cell: electrode_id(cell[0], cell[1]))
+    combined: list[list[Optional[Cell]]] = []
+    scheduled_assignments: list[tuple[Cell, Cell, list[Cell]]] = []
+    scheduled_paths: list[list[Optional[Cell]]] = []
+    round_indices: list[int] = []
+    settled_targets: list[Cell] = []
+    round_index = 1
+
+    while pending_targets:
+        round_start = max((len(schedule) for schedule in combined), default=0)
+        scheduled_this_round = 0
+
+        while pending_targets and scheduled_this_round < max_parallel:
+            best: Optional[tuple[int, int, int, int, int, Cell, Cell, list[Cell], list[Optional[Cell]]]] = None
+            for target_index, target in enumerate(pending_targets):
+                safe_obstacles = base_obstacles | _settled_target_risk_obstacles(
+                    target,
+                    settled_targets,
+                    merge_regions,
+                )
+                for source in sources:
+                    if source_capacity.get(source, 0) <= 0:
+                        continue
+                    path = planner.plan(source, target, safe_obstacles - {source, target})
+                    if not path:
+                        continue
+                    scheduled = _schedule_one_multi_path(
+                        path,
+                        combined,
+                        max_wait_steps=max_wait_steps,
+                        min_start_delay=round_start,
+                        merge_regions=merge_regions,
+                        allow_settled_goal_adjacency=True,
+                    )
+                    if not scheduled:
+                        continue
+                    first_active_step = next(
+                        (step for step, cell in enumerate(scheduled) if cell is not None),
+                        len(scheduled),
+                    )
+                    candidate = (
+                        -_target_fill_priority(target),
+                        first_active_step,
+                        len(path),
+                        target_index,
+                        -source_capacity.get(source, 0),
+                        electrode_id(source[0], source[1]),
+                        source,
+                        target,
+                        path,
+                        scheduled,
+                    )
+                    if best is None or candidate < best:
+                        best = candidate
+
+            if best is None:
+                break
+
+            _fill_priority, _first_active_step, _path_len, target_index, _priority, _eid, source, target, path, scheduled = best
+            pending_targets.pop(target_index)
+            source_capacity[source] -= 1
+            combined.append(scheduled)
+            scheduled_assignments.append((source, target, path))
+            scheduled_paths.append(scheduled)
+            round_indices.append(round_index)
+            settled_targets.append(target)
+            scheduled_this_round += 1
+
+        if scheduled_this_round == 0:
+            return [], [], []
+        round_index += 1
+
+    if len(scheduled_paths) != len(assignment_list):
+        return [], [], []
+    return scheduled_assignments, scheduled_paths, round_indices
+
+
+def _target_fill_priority(target: Cell) -> int:
+    row, col = target
+    if not is_core_cell(target):
+        return 0
+    edge_depth = min(row, col, GRID_ROWS - 1 - row, GRID_COLS - 1 - col)
+    center_bias = (GRID_ROWS - abs(2 * row - (GRID_ROWS - 1))) + (GRID_COLS - abs(2 * col - (GRID_COLS - 1)))
+    return edge_depth * 100 + center_bias
+
+
+def _schedule_assignments_with_reroute_core(
+    assignments: Iterable[tuple[Cell, Cell, list[Cell]]],
+    planner: "AStarPlanner",
+    obstacles: Iterable[Cell],
+    merge_regions: Mapping[Cell, int],
+    max_parallel: int,
+    max_wait_steps: int,
+) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
+    assignment_list = list(assignments)
+    if not assignment_list:
+        return [], [], []
+
+    max_repairs = max(1, min(len(assignment_list) * 2, len(assignment_list) * len(assignment_list)))
+    seen_orders: set[tuple[tuple[Cell, Cell], ...]] = set()
+    for _ in range(max_repairs + 1):
+        order_signature = tuple((source, target) for source, target, _path in assignment_list)
+        if order_signature in seen_orders:
+            return [], [], []
+        seen_orders.add(order_signature)
+        scheduled_assignments, scheduled_paths, round_indices, failed_index, blocker_index = _try_schedule_assignment_order(
+            assignment_list,
+            planner,
+            obstacles,
+            merge_regions,
+            max_parallel,
+            max_wait_steps,
+        )
+        if failed_index is None:
+            return scheduled_assignments, scheduled_paths, round_indices
+        if blocker_index is None or blocker_index >= failed_index:
+            return [], [], []
+        blocked_assignment = assignment_list.pop(failed_index)
+        assignment_list.insert(blocker_index, blocked_assignment)
+
+    return [], [], []
+
+
+def _try_schedule_assignment_order(
+    assignment_list: list[tuple[Cell, Cell, list[Cell]]],
+    planner: "AStarPlanner",
+    obstacles: Iterable[Cell],
+    merge_regions: Mapping[Cell, int],
+    max_parallel: int,
+    max_wait_steps: int,
+) -> tuple[
+    list[tuple[Cell, Cell, list[Cell]]],
+    list[list[Optional[Cell]]],
+    list[int],
+    Optional[int],
+    Optional[int],
+]:
+    combined: list[list[Optional[Cell]]] = []
+    scheduled_assignments: list[tuple[Cell, Cell, list[Cell]]] = []
+    scheduled_paths: list[list[Optional[Cell]]] = []
+    round_indices: list[int] = []
+    scheduled_targets: list[Cell] = []
+    group_state: dict[int, dict[str, int]] = {}
+    base_obstacles = set(obstacles)
+
+    for idx, (source, target, path) in enumerate(assignment_list):
+        group_id = merge_regions.get(target, idx + 1)
+        state = group_state.setdefault(
+            group_id,
+            {"round": 1, "count": 0, "start": 0, "end": 0},
+        )
+        if state["count"] >= max_parallel:
+            state["round"] += 1
+            state["count"] = 0
+            state["start"] = state["end"]
+
+        scheduled = _schedule_one_multi_path(
+            path,
+            combined,
+            max_wait_steps=max_wait_steps,
+            min_start_delay=state["start"],
+            merge_regions=merge_regions,
+            allow_settled_goal_adjacency=True,
+        )
+        if not scheduled:
+            reroute_obstacles = base_obstacles | _settled_target_risk_obstacles(
+                target,
+                scheduled_targets,
+                merge_regions,
+            )
+            rerouted_path = planner.plan(source, target, reroute_obstacles - {source, target})
+            if rerouted_path and rerouted_path != path:
+                path = rerouted_path
+                scheduled = _schedule_one_multi_path(
+                    path,
+                    combined,
+                    max_wait_steps=max_wait_steps,
+                    min_start_delay=state["start"],
+                    merge_regions=merge_regions,
+                    allow_settled_goal_adjacency=True,
+                )
+        if not scheduled:
+            blocker_index = _first_target_blocker_index(path, target, scheduled_assignments, merge_regions)
+            return [], [], [], idx, blocker_index
+
+        combined.append(scheduled)
+        scheduled_assignments.append((source, target, path))
+        scheduled_paths.append(scheduled)
+        round_indices.append(state["round"])
+        scheduled_targets.append(target)
+        state["count"] += 1
+        state["end"] = max(state["end"], len(scheduled))
+
+    return scheduled_assignments, scheduled_paths, round_indices, None, None
+
+
+def _first_target_blocker_index(
+    path: list[Cell],
+    target: Cell,
+    scheduled_assignments: Iterable[tuple[Cell, Cell, list[Cell]]],
+    merge_regions: Mapping[Cell, int],
+) -> Optional[int]:
+    for idx, (_, settled_target, _) in enumerate(scheduled_assignments):
+        if _same_merge_region(target, settled_target, merge_regions):
+            continue
+        for cell in path[:-1]:
+            if cell == settled_target or in_pull_risk_zone(cell, settled_target):
+                return idx
+    return None
+
+
+def _settled_target_risk_obstacles(
+    target: Cell,
+    settled_targets: Iterable[Cell],
+    merge_regions: Mapping[Cell, int],
+) -> set[Cell]:
+    obstacles: set[Cell] = set()
+    for settled_target in settled_targets:
+        if _same_merge_region(target, settled_target, merge_regions):
+            continue
+        row, col = settled_target
+        for row_delta in (-1, 0, 1):
+            for col_delta in (-1, 0, 1):
+                cell = (row + row_delta, col + col_delta)
+                if cell in LAYOUT_CELLS:
+                    obstacles.add(cell)
+    obstacles.discard(target)
+    return obstacles
+
+
 def build_multi_droplet_assignments(
     sources: Iterable[Cell],
     target_shape_cells: Iterable[Cell],
@@ -495,7 +863,10 @@ def build_multi_droplet_assignments(
     obstacles: Iterable[Cell] = (),
     source_capacity: Optional[Mapping[Cell, int]] = None,
 ) -> list[MultiDropletAssignment]:
-    source_list = sorted(set(sources), key=lambda cell: electrode_id(cell[0], cell[1]))
+    source_list = sorted(
+        {source for source in sources if not is_waste_reservoir_cell(source)},
+        key=lambda cell: electrode_id(cell[0], cell[1]),
+    )
     target_list = _unique_cells(target_shape_cells)
     if not source_list or not target_list:
         return []
@@ -504,15 +875,13 @@ def build_multi_droplet_assignments(
     if len(raw_assignments) != len(target_list):
         return []
 
-    raw_paths = [path for _, _, path in raw_assignments]
     merge_regions = target_merge_region_map(target_list)
-    group_ids = [merge_regions.get(target, idx + 1) for idx, (_, target, _) in enumerate(raw_assignments)]
-    scheduled_paths, round_indices = schedule_multi_paths_by_contamination_groups(
-        raw_paths,
-        group_ids,
-        max_parallel=MAX_PARALLEL_MULTI_DROPLETS,
-        merge_regions=merge_regions,
-        allow_settled_goal_adjacency=True,
+    raw_assignments = order_assignments_by_transport_dependencies(raw_assignments, merge_regions)
+    raw_assignments, scheduled_paths, round_indices = schedule_assignments_with_reroute(
+        raw_assignments,
+        planner,
+        obstacles,
+        merge_regions,
     )
     if len(scheduled_paths) != len(raw_assignments):
         return []
@@ -541,29 +910,119 @@ def _multi_step_conflicts(
 ) -> bool:
     if candidate_cell is None:
         return False
-    for existing in existing_paths:
+    current_is_moving = previous_cell is not None and candidate_cell != previous_cell
+    existing_path_list = list(existing_paths)
+    if candidate_cell == own_goal and _settled_goal_would_block_future_transport(
+        existing_path_list,
+        candidate_cell,
+        step,
+        merge_regions,
+        allow_settled_goal_adjacency,
+    ):
+        return True
+    for existing in existing_path_list:
         other_now = existing[step] if step < len(existing) else existing[-1]
-        other_prev = existing[step - 1] if step - 1 < len(existing) else existing[-1]
+        if step <= 0:
+            other_prev = None
+        elif step - 1 < len(existing):
+            other_prev = existing[step - 1]
+        else:
+            other_prev = existing[-1]
         other_goal = next((cell for cell in reversed(existing) if cell is not None), None)
         if other_now is None:
             continue
-        candidate_region = merge_regions.get(candidate_cell)
-        other_region = merge_regions.get(other_now)
-        own_region = merge_regions.get(own_goal)
-        in_same_merge_region = candidate_region is not None and candidate_region == other_region
-        approaching_merge_region = own_region is not None and own_region == other_region
-        other_is_settled_goal = allow_settled_goal_adjacency and other_goal is not None and other_now == other_goal == other_prev
+        other_is_moving = other_prev is not None and other_now != other_prev
         if candidate_cell == other_now:
-            return not (in_same_merge_region or approaching_merge_region)
+            return True
+        if (
+            current_is_moving
+            and other_prev is not None
+            and in_pull_risk_zone(candidate_cell, other_prev)
+            and not _can_share_settled_goal_risk(
+                candidate_cell,
+                own_goal,
+                other_prev,
+                other_goal,
+                merge_regions,
+                allow_settled_goal_adjacency,
+            )
+        ):
+            return True
+        if (
+            other_is_moving
+            and previous_cell is not None
+            and in_pull_risk_zone(other_now, previous_cell)
+            and not _can_share_settled_goal_risk(
+                previous_cell,
+                own_goal,
+                other_now,
+                other_goal,
+                merge_regions,
+                allow_settled_goal_adjacency,
+            )
+        ):
+            return True
         if in_pull_risk_zone(candidate_cell, other_now):
-            if not (
-                in_same_merge_region
-                or approaching_merge_region
-                or (candidate_cell == own_goal and other_now == other_goal)
-                or other_is_settled_goal
+            if not _can_share_settled_goal_risk(
+                candidate_cell,
+                own_goal,
+                other_now,
+                other_goal,
+                merge_regions,
+                allow_settled_goal_adjacency,
             ):
                 return True
         if previous_cell is not None and other_prev is not None and previous_cell == other_now and candidate_cell == other_prev:
+            return True
+    return False
+
+
+def _can_share_settled_goal_risk(
+    candidate_cell: Cell,
+    own_goal: Cell,
+    other_cell: Cell,
+    other_goal: Optional[Cell],
+    merge_regions: Mapping[Cell, int],
+    allow_settled_goal_adjacency: bool,
+) -> bool:
+    if not allow_settled_goal_adjacency:
+        return False
+    if other_goal is None or other_cell != other_goal:
+        return False
+    return _same_merge_region(own_goal, other_cell, merge_regions)
+
+
+def _same_merge_region(a: Cell, b: Cell, merge_regions: Mapping[Cell, int]) -> bool:
+    region = merge_regions.get(a)
+    return region is not None and region == merge_regions.get(b)
+
+
+def _settled_goal_would_block_future_transport(
+    existing_paths: Iterable[list[Optional[Cell]]],
+    settled_goal: Cell,
+    settle_step: int,
+    merge_regions: Mapping[Cell, int],
+    allow_settled_goal_adjacency: bool,
+) -> bool:
+    for existing in existing_paths:
+        other_goal = next((cell for cell in reversed(existing) if cell is not None), None)
+        for future_step in range(settle_step + 1, len(existing)):
+            other_now = existing[future_step]
+            if other_now is None:
+                continue
+            if other_now == settled_goal:
+                return True
+            if not in_pull_risk_zone(settled_goal, other_now):
+                continue
+            if _can_share_settled_goal_risk(
+                settled_goal,
+                settled_goal,
+                other_now,
+                other_goal,
+                merge_regions,
+                allow_settled_goal_adjacency,
+            ):
+                continue
             return True
     return False
 

@@ -1,4 +1,5 @@
 import csv
+import json
 import math
 import threading
 import time
@@ -22,7 +23,6 @@ from dmf_simulation import (
     GRID_ROWS,
     INITIAL_DROPLET_CAPACITY,
     LAYOUT_CELLS,
-    MAX_PARALLEL_MULTI_DROPLETS,
     MultiDropletAssignment,
     RESERVOIR_CELLS,
     RESERVOIR_CONNECTIONS,
@@ -53,9 +53,13 @@ CAMERA_PREVIEW_MAX_PX = 520
 AUTO_LOOP_INTERVAL_MS = 70
 CAMERA_DISPLAY_INTERVAL_S = 0.08
 MATRIX_DISPLAY_INTERVAL_S = 0.12
+MAX_CANVAS_PATH_ARROWS = 80
 
 
 class STM32MatrixController:
+    PRESET_SCHEMA = "dmf_visual_platform_settings"
+    PRESET_VERSION = 1
+
     OP_MOVE = "移动"
     OP_MERGE = "混合"
     OP_SPLIT = "分裂"
@@ -135,6 +139,7 @@ class STM32MatrixController:
         self.loop_assignments = []
         self.undo_stack = []
         self.max_undo_snapshots = 100
+        self.preset_dir = Path(__file__).resolve().parent / "presets"
         self.path_index = 0
         self.path_index_b = 0
         self.hover_cell = None
@@ -650,6 +655,12 @@ class STM32MatrixController:
         self.btn_clear_obstacles = self._make_button(self.cleanup_row, "清空障碍", self.clear_obstacles, self.colors["btn_off"], self.colors["text"])
         self.btn_clear_obstacles.pack(side="left", padx=(6, 0))
 
+        self.btn_save_preset = self._make_button(self.cleanup_row, "保存设置", self.save_settings_preset, self.colors["btn_off"], self.colors["text"])
+        self.btn_save_preset.pack(side="right", padx=(6, 0))
+
+        self.btn_load_preset = self._make_button(self.cleanup_row, "导入设置", self.load_settings_preset, self.colors["btn_off"], self.colors["text"])
+        self.btn_load_preset.pack(side="right", padx=(6, 0))
+
     def _simulation_parameter_help_text(self):
         return "\n".join(
             [
@@ -825,6 +836,196 @@ class STM32MatrixController:
             writer.writerows(rows)
         self.log(f"仿真指标已导出: {path}")
         return True
+
+    def save_settings_preset(self, path=None):
+        if path is None:
+            self.preset_dir.mkdir(parents=True, exist_ok=True)
+            selected = filedialog.asksaveasfilename(
+                title="保存仿真设置",
+                initialdir=str(self.preset_dir),
+                initialfile="dmf_preset.json",
+                defaultextension=".json",
+                filetypes=(("JSON", "*.json"), ("All files", "*.*")),
+            )
+            if not selected:
+                return False
+            path = selected
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema": self.PRESET_SCHEMA,
+            "version": self.PRESET_VERSION,
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "operation": self.operation_var.get(),
+            "tool": self.tool_var.get(),
+            "mode": self.mode_var.get(),
+            "motion_profile": self.motion_profile_var.get(),
+            "vision_noise": self.vision_noise_var.get(),
+            "fault_mode": self.fault_mode_var.get(),
+            "settings": self._serialize_settings_snapshot(self._settings_snapshot()),
+        }
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        self.log(f"设置已保存 -> {path}")
+        return True
+
+    def load_settings_preset(self, path=None):
+        if self.auto_running:
+            self.log("闭环运行中，无法导入设置；请先暂停或停止")
+            return False
+        interactive = path is None
+        if path is None:
+            self.preset_dir.mkdir(parents=True, exist_ok=True)
+            selected = filedialog.askopenfilename(
+                title="导入仿真设置",
+                initialdir=str(self.preset_dir),
+                filetypes=(("JSON", "*.json"), ("All files", "*.*")),
+            )
+            if not selected:
+                return False
+            path = selected
+        path = Path(path)
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            operation, tool, snapshot = self._settings_preset_from_payload(payload)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            self.log(f"导入设置失败：{exc}")
+            if interactive:
+                messagebox.showerror("导入失败", str(exc))
+            return False
+
+        self._push_undo_snapshot()
+        self.operation_var.set(operation)
+        self.tool_var.set(tool)
+        if payload.get("mode"):
+            self.mode_var.set(payload["mode"])
+        if payload.get("motion_profile"):
+            self.motion_profile_var.set(payload["motion_profile"])
+        if payload.get("vision_noise"):
+            self.vision_noise_var.set(payload["vision_noise"])
+        if payload.get("fault_mode"):
+            self.fault_mode_var.set(payload["fault_mode"])
+        self._restore_settings_snapshot(snapshot)
+        self._update_tool_options()
+        self._update_operation_specific_controls()
+        self._refresh_matrix_legend(manual=False)
+        self.auto_status_label.config(text=f"闭环: {self.operation_var.get()}待机", fg=self.colors["muted"])
+        self.log(f"设置已导入 <- {path}")
+        self._draw_matrix_canvas()
+        self._render_sim_camera_frame()
+        return True
+
+    def _settings_preset_from_payload(self, payload):
+        if not isinstance(payload, dict):
+            raise ValueError("设置文件格式不正确")
+        if payload.get("schema") != self.PRESET_SCHEMA:
+            raise ValueError("不是数字微流控视觉平台的设置文件")
+        if payload.get("version") != self.PRESET_VERSION:
+            raise ValueError(f"不支持的设置版本：{payload.get('version')}")
+        operation = payload.get("operation", self.OP_MOVE)
+        valid_operations = {self.OP_MOVE, self.OP_MERGE, self.OP_SPLIT, self.OP_MULTI, self.OP_LOOP}
+        if operation not in valid_operations:
+            raise ValueError(f"不支持的操作类型：{operation}")
+        settings = payload.get("settings")
+        if not isinstance(settings, dict):
+            raise ValueError("设置文件缺少 settings 字段")
+        snapshot = self._deserialize_settings_snapshot(settings)
+        tool = payload.get("tool") or self._tool_options_for_operation()[0]
+        previous_operation = self.operation_var.get()
+        self.operation_var.set(operation)
+        try:
+            valid_tools = self._tool_options_for_operation()
+        finally:
+            self.operation_var.set(previous_operation)
+        if tool not in valid_tools:
+            tool = valid_tools[0]
+        return operation, tool, snapshot
+
+    def _serialize_cell(self, cell):
+        if cell is None:
+            return None
+        return [int(cell[0]), int(cell[1])]
+
+    def _deserialize_cell(self, value):
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            raise ValueError(f"非法电极坐标：{value}")
+        return (int(value[0]), int(value[1]))
+
+    def _serialize_cells(self, cells):
+        return [self._serialize_cell(cell) for cell in sorted(cells)]
+
+    def _deserialize_cells(self, values):
+        if values is None:
+            return []
+        if not isinstance(values, list):
+            raise ValueError(f"非法电极坐标列表：{values}")
+        return [self._deserialize_cell(value) for value in values]
+
+    def _serialize_settings_snapshot(self, snapshot):
+        return {
+            "start_cell": self._serialize_cell(snapshot["start_cell"]),
+            "goal_cell": self._serialize_cell(snapshot["goal_cell"]),
+            "secondary_cell": self._serialize_cell(snapshot["secondary_cell"]),
+            "split_left_cell": self._serialize_cell(snapshot["split_left_cell"]),
+            "split_right_cell": self._serialize_cell(snapshot["split_right_cell"]),
+            "loaded_reservoirs": self._serialize_cells(snapshot["loaded_reservoirs"]),
+            "initial_droplet_cells": self._serialize_cells(snapshot["initial_droplet_cells"]),
+            "obstacle_cells": self._serialize_cells(snapshot["obstacle_cells"]),
+            "target_shape_points": [self._serialize_cell(cell) for cell in snapshot["target_shape_points"]],
+            "target_shape_cells": [self._serialize_cell(cell) for cell in snapshot["target_shape_cells"]],
+            "loop_path_points": [self._serialize_cell(cell) for cell in snapshot["loop_path_points"]],
+            "loop_path_cells": [self._serialize_cell(cell) for cell in snapshot["loop_path_cells"]],
+            "loop_routes": [
+                {
+                    "source": self._serialize_cell(route["source"]),
+                    "path_points": [self._serialize_cell(cell) for cell in route["path_points"]],
+                    "path": [self._serialize_cell(cell) for cell in route.get("path", [])],
+                }
+                for route in snapshot["loop_routes"]
+            ],
+            "loop_route_index": snapshot["loop_route_index"],
+            "loop_cycles": int(snapshot["loop_cycles"]),
+            "loop_interval_s": float(snapshot["loop_interval_s"]),
+            "mixing_cycles": int(snapshot["mixing_cycles"]),
+        }
+
+    def _deserialize_settings_snapshot(self, data):
+        snapshot = {
+            "start_cell": self._deserialize_cell(data.get("start_cell", self.start_cell)),
+            "goal_cell": self._deserialize_cell(data.get("goal_cell", self.goal_cell)),
+            "secondary_cell": self._deserialize_cell(data.get("secondary_cell", self.secondary_cell)),
+            "split_left_cell": self._deserialize_cell(data.get("split_left_cell", self.split_left_cell)),
+            "split_right_cell": self._deserialize_cell(data.get("split_right_cell", self.split_right_cell)),
+            "loaded_reservoirs": set(self._deserialize_cells(data.get("loaded_reservoirs", []))),
+            "initial_droplet_cells": set(self._deserialize_cells(data.get("initial_droplet_cells", []))),
+            "obstacle_cells": set(self._deserialize_cells(data.get("obstacle_cells", []))),
+            "target_shape_points": self._deserialize_cells(data.get("target_shape_points", [])),
+            "target_shape_cells": self._deserialize_cells(data.get("target_shape_cells", [])),
+            "loop_path_points": self._deserialize_cells(data.get("loop_path_points", [])),
+            "loop_path_cells": self._deserialize_cells(data.get("loop_path_cells", [])),
+            "loop_routes": [
+                {
+                    "source": self._deserialize_cell(route["source"]),
+                    "path_points": self._deserialize_cells(route.get("path_points", [])),
+                    "path": self._deserialize_cells(route.get("path", [])),
+                }
+                for route in data.get("loop_routes", [])
+            ],
+            "loop_route_index": data.get("loop_route_index"),
+            "loop_cycles": int(data.get("loop_cycles", self.loop_cycles)),
+            "loop_interval_s": float(data.get("loop_interval_s", self.loop_interval_s)),
+            "mixing_cycles": int(data.get("mixing_cycles", self.mixing_cycles)),
+        }
+        if not snapshot["target_shape_cells"] and snapshot["target_shape_points"]:
+            cells = []
+            for cell in snapshot["target_shape_points"]:
+                if cells:
+                    cells.extend(grid_polyline_cells(cells[-1], cell)[1:])
+                else:
+                    cells.append(cell)
+            snapshot["target_shape_cells"] = cells
+        return snapshot
 
     def _make_button(self, parent, text, command, bg, fg):
         hover = self.colors["accent_hover"] if fg == "white" else self.colors["btn_off_hover"]
@@ -1138,7 +1339,10 @@ class STM32MatrixController:
                     for assignment in self.multi_assignments
                 ]
                 self.multi_droplet_visible = [
-                    self._scheduled_cell_at(assignment.scheduled_path, 0) is not None
+                    self._multi_cell_is_visible_droplet(
+                        assignment,
+                        self._scheduled_cell_at(assignment.scheduled_path, 0),
+                    )
                     for assignment in self.multi_assignments
                 ]
             else:
@@ -1328,7 +1532,7 @@ class STM32MatrixController:
 
     def _camera_render_context(self, manual_view=None):
         if manual_view is None:
-            manual_view = self._is_manual_page_selected()
+            manual_view = self._is_manual_page_selected() and not self.auto_running
         if manual_view:
             positions = self._manual_droplet_positions()
             return {
@@ -1960,9 +2164,16 @@ class STM32MatrixController:
             paths = self.operation_paths if self.operation_paths else ([self.path] if self.path else [])
             if not paths and self.operation_var.get() == self.OP_LOOP:
                 paths = self._loop_preview_paths()
+            if self.operation_paths and self.operation_path_cells:
+                path_cells = self.operation_path_cells
+            else:
+                path_cells = {cell for path in paths for cell in path}
+            for cell in sorted(path_cells, key=lambda item: (item[0], item[1])):
+                self._draw_cell(cell, fill=self.colors["path"], outline="")
+            arrow_stride = max(1, math.ceil(len(paths) / MAX_CANVAS_PATH_ARROWS)) if paths else 1
             for path_index, path in enumerate(paths):
-                for cell in path:
-                    self._draw_cell(cell, fill=self.colors["path"], outline="")
+                if path_index % arrow_stride != 0:
+                    continue
                 self._draw_path_arrow(path, self._path_arrow_color(path_index))
 
         for cell in sorted(self.loaded_reservoirs, key=lambda item: electrode_id(item[0], item[1], self.cols)):
@@ -2210,6 +2421,9 @@ class STM32MatrixController:
         elif tool == self.TOOL_MULTI_LOAD:
             if not is_reservoir_cell(cell):
                 self.log("设置储液池时请点击四周储液池")
+                return
+            if cell in CORNER_RESERVOIRS:
+                self.log("四角为废液池，不作为加样储液池")
                 return
             self._push_undo_snapshot()
             self._clear_planned_operation()
@@ -2734,7 +2948,7 @@ class STM32MatrixController:
         if round_count > 1:
             self.log(
                 f"目标较密集或数量较多，已自动拆为 {round_count} 轮并行调度；"
-                f"同一连通液区每轮最多 {MAX_PARALLEL_MULTI_DROPLETS} 滴，无污染区域可同时并行"
+                "每一步由路径冲突、回吸风险和目标液区关系动态决定可同时行动的液滴数"
             )
         merge_regions = self._target_merge_regions()
         if merge_regions:
@@ -2749,11 +2963,13 @@ class STM32MatrixController:
         return assignments
 
     def _multi_source_cells(self):
-        return set(self.loaded_reservoirs) | set(self.initial_droplet_cells)
+        return (set(self.loaded_reservoirs) - set(CORNER_RESERVOIRS)) | set(self.initial_droplet_cells)
 
     def _multi_source_capacities(self):
         capacities = {}
         for cell in self.loaded_reservoirs:
+            if cell in CORNER_RESERVOIRS:
+                continue
             capacities[cell] = RESERVOIR_DROPLET_CAPACITY
         for cell in self.initial_droplet_cells:
             capacities[cell] = capacities.get(cell, 0) + INITIAL_DROPLET_CAPACITY
@@ -3269,7 +3485,7 @@ class STM32MatrixController:
                 self.multi_droplet_visible.append(False)
             else:
                 self.sim_droplets[idx].reset(cell)
-                self.multi_droplet_visible.append(True)
+                self.multi_droplet_visible.append(self._multi_cell_is_visible_droplet(assignment, cell))
         self._set_auto_active_cells(self._scheduled_active_cells_for_assignments(self.multi_assignments, self.multi_step_index))
         self.log(f"多液滴调试{'步进' if direction > 0 else '回退'}：{self.multi_step_index}/{max_steps - 1}")
         return True
@@ -3323,12 +3539,29 @@ class STM32MatrixController:
         return {path[index]}
 
     def _scheduled_active_cells_for_assignments(self, assignments, step):
-        return {
+        active = {
             cell
             for assignment in assignments
             for cell in (self._scheduled_cell_at(assignment.scheduled_path, step),)
             if cell is not None
         }
+        active.update(self._dispensed_reservoir_hold_cells(assignments, step))
+        return active
+
+    def _dispensed_reservoir_hold_cells(self, assignments, step):
+        holds = set()
+        for assignment in assignments:
+            source = assignment.source
+            if source not in self.loaded_reservoirs or source in CORNER_RESERVOIRS or not is_reservoir_cell(source):
+                continue
+            current = self._scheduled_cell_at(assignment.scheduled_path, step)
+            if current is not None and current != source:
+                holds.add(source)
+        return holds
+
+    @staticmethod
+    def _multi_cell_is_visible_droplet(_assignment, cell):
+        return cell in CORE_CELLS
 
     def simulate_detection_dropout(self):
         self.drop_frame_until = time.monotonic() + 0.8
@@ -3592,7 +3825,7 @@ class STM32MatrixController:
             start_cell = self._scheduled_cell_at(assignment.scheduled_path, 0)
             if start_cell is not None:
                 droplet.reset(start_cell)
-                self.multi_droplet_visible.append(True)
+                self.multi_droplet_visible.append(self._multi_cell_is_visible_droplet(assignment, start_cell))
                 if is_reservoir_cell(assignment.source):
                     self.log(f"D{assignment.droplet_id} 从储液池 {self._cell_label(assignment.source)} 准备出滴")
                 else:
@@ -3681,8 +3914,15 @@ class STM32MatrixController:
             if current is None:
                 if phase_progress >= 0.62:
                     self.sim_droplets[idx].reset(target)
+                    self.multi_droplet_visible[idx] = self._multi_cell_is_visible_droplet(assignment, target)
+                else:
+                    self.multi_droplet_visible[idx] = False
+            elif is_reservoir_cell(current):
+                if target in CORE_CELLS and phase_progress >= 0.62:
+                    self.sim_droplets[idx].reset(target)
                     self.multi_droplet_visible[idx] = True
                 else:
+                    self.sim_droplets[idx].reset(current)
                     self.multi_droplet_visible[idx] = False
             else:
                 self.multi_droplet_visible[idx] = True
@@ -3706,9 +3946,9 @@ class STM32MatrixController:
                 if cell is None:
                     self.multi_droplet_visible[idx] = False
                 else:
-                    self.multi_droplet_visible[idx] = True
                     self.sim_droplets[idx].reset(cell)
-                    if previous_cell is None:
+                    self.multi_droplet_visible[idx] = self._multi_cell_is_visible_droplet(assignment, cell)
+                    if is_reservoir_cell(previous_cell) and cell in CORE_CELLS:
                         self.log_feedback(
                             "储液池出滴",
                             f"D{assignment.droplet_id} 已从 {self._cell_label(assignment.source)} 形成单滴并进入调度",
@@ -3745,6 +3985,7 @@ class STM32MatrixController:
                 active.add(current)
                 continue
             active.add(nxt)
+        active.update(self._dispensed_reservoir_hold_cells(self.multi_assignments, step))
         return active
 
     def _multi_active_cells_for_step(self, step):

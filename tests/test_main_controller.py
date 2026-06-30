@@ -48,6 +48,32 @@ class MainControllerLayoutTests(unittest.TestCase):
             sizes.append((x1 - x0, y1 - y0))
         return sizes
 
+    def test_multi_path_canvas_draws_shared_path_cells_once(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.matrix_canvas = self.app.path_canvas
+        self.app.operation_paths = [
+            [(2, 2), (2, 3), (2, 4)],
+            [(2, 2), (2, 3), (3, 3)],
+        ]
+        self.app._refresh_operation_path_cells()
+        path_drawn_cells = []
+        original_draw_cell = self.app._draw_cell
+
+        def record_path_cell(cell, *args, **kwargs):
+            fill = args[0] if args else kwargs.get("fill")
+            if fill == self.app.colors["path"]:
+                path_drawn_cells.append(cell)
+            return original_draw_cell(cell, *args, **kwargs)
+
+        self.app._draw_cell = record_path_cell
+        try:
+            self.app._draw_matrix_canvas_one()
+        finally:
+            self.app._draw_cell = original_draw_cell
+
+        self.assertEqual(len(path_drawn_cells), len(set(path_drawn_cells)))
+        self.assertEqual(set(path_drawn_cells), self.app.operation_path_cells)
+
     def _click_cell(self, cell, shift=False):
         original = self.app._canvas_to_cell
         self.app._canvas_to_cell = lambda _x, _y: cell
@@ -103,6 +129,40 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn("液滴", labels)
         self.assertNotIn("液滴A", labels)
         self.assertNotIn("液滴B", labels)
+
+    def test_save_and_load_setting_preset_restores_multi_target_setup(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.on_operation_changed()
+        self.app.tool_var.set(self.app.TOOL_MULTI_SHAPE)
+        self.app.loaded_reservoirs = {(-3, 6), (6, -3)}
+        self.app.initial_droplet_cells = {(4, 4)}
+        self.app.obstacle_cells = {(8, 8)}
+        self.app.target_shape_points = [(6, 2), (6, 4), (8, 2), (10, 2)]
+        self.app._rebuild_target_shape_cells()
+        expected_target_cells = list(self.app.target_shape_cells)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_path = Path(tmpdir) / "cse.json"
+
+            self.assertTrue(self.app.save_settings_preset(preset_path))
+
+            self.app.operation_var.set(self.app.OP_MOVE)
+            self.app.tool_var.set(self.app.TOOL_MOVE_START)
+            self.app.loaded_reservoirs.clear()
+            self.app.initial_droplet_cells.clear()
+            self.app.obstacle_cells.clear()
+            self.app.target_shape_points.clear()
+            self.app.target_shape_cells.clear()
+
+            self.assertTrue(self.app.load_settings_preset(preset_path))
+
+        self.assertEqual(self.app.operation_var.get(), self.app.OP_MULTI)
+        self.assertEqual(self.app.tool_var.get(), self.app.TOOL_MULTI_SHAPE)
+        self.assertEqual(self.app.loaded_reservoirs, {(-3, 6), (6, -3)})
+        self.assertEqual(self.app.initial_droplet_cells, {(4, 4)})
+        self.assertEqual(self.app.obstacle_cells, {(8, 8)})
+        self.assertEqual(self.app.target_shape_points, [(6, 2), (6, 4), (8, 2), (10, 2)])
+        self.assertEqual(self.app.target_shape_cells, expected_target_cells)
 
     def test_target_electrode_click_toggles_placement(self):
         self.app.operation_var.set(self.app.OP_MULTI)
@@ -602,6 +662,105 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.active_auto_cells, {(0, 1), (2, 1)})
         self.assertNotIn((0, 2), self.app.active_auto_cells)
         self.assertNotIn((2, 2), self.app.active_auto_cells)
+
+    def test_multi_debug_step_keeps_settled_droplets_active(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 0), (0, 1), [(0, 0), (0, 1)], [(0, 0), (0, 1), (0, 1)]),
+            MultiDropletAssignment(2, (2, 0), (2, 2), [(2, 0), (2, 1), (2, 2)], [(2, 0), (2, 1), (2, 2)]),
+        ]
+        self.app.multi_step_index = 1
+
+        changed = self.app._debug_step_multi(1)
+
+        self.assertTrue(changed)
+        self.assertEqual([droplet.cell for droplet in self.app.sim_droplets], [(0, 1), (2, 2)])
+        self.assertEqual(self.app.active_auto_cells, {(0, 1), (2, 2)})
+
+    def test_multi_auto_active_cells_hold_waiting_or_settled_droplets(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 0), (0, 1), [(0, 0), (0, 1)], [(0, 0), (0, 1), (0, 1)]),
+            MultiDropletAssignment(2, (2, 0), (2, 3), [(2, 0), (2, 1), (2, 2), (2, 3)], [(2, 0), (2, 1), (2, 2), (2, 3)]),
+        ]
+
+        active = self.app._multi_active_cells_for_phase(1, 0.0)
+
+        self.assertEqual(active, {(0, 1), (2, 2)})
+
+    def test_reservoir_dispense_uses_two_pull_phases_and_reholds_source(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.loaded_reservoirs = {(-3, 6)}
+        self.app.multi_assignments = [
+            MultiDropletAssignment(
+                1,
+                (-3, 6),
+                (1, 6),
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+            ),
+        ]
+
+        first_pull = self.app._multi_active_cells_for_phase(0, 0.0)
+        second_pull = self.app._multi_active_cells_for_phase(1, 0.0)
+
+        self.assertEqual(first_pull, {(-1, 6)})
+        self.assertEqual(second_pull, {(-3, 6), (0, 6)})
+
+    def test_reservoir_dispense_does_not_expect_visible_droplet_before_core_pull(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.loaded_reservoirs = {(-3, 6)}
+        self.app.multi_assignments = [
+            MultiDropletAssignment(
+                1,
+                (-3, 6),
+                (1, 6),
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+            ),
+        ]
+        self.app.auto_running = True
+        self.app.last_detection_time = time.monotonic()
+
+        self.app._begin_multi_operation()
+        healthy = self.app._check_multi_visual_health(max_steps=4)
+
+        self.assertEqual(self.app.multi_droplet_visible, [False])
+        self.assertEqual(self.app.active_auto_cells, {(-1, 6)})
+        self.assertTrue(healthy)
+
+    def test_reservoir_dispense_tracks_droplet_after_core_pull_phase(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.loaded_reservoirs = {(-3, 6)}
+        self.app.multi_assignments = [
+            MultiDropletAssignment(
+                1,
+                (-3, 6),
+                (1, 6),
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+                [(-3, 6), (-1, 6), (0, 6), (1, 6)],
+            ),
+        ]
+        self.app.auto_running = True
+        self.app.last_detection_time = time.monotonic()
+        self.app._begin_multi_operation()
+
+        now = self.app.multi_step_start_time + self.app.multi_step_duration_s + 0.01
+        self.app._multi_auto_step(now, self.app.multi_step_duration_s)
+        core_pull_now = self.app.multi_step_start_time + self.app.multi_step_duration_s * 0.70
+        self.app._multi_auto_step(core_pull_now, self.app.multi_step_duration_s * 0.70)
+
+        self.assertEqual(self.app.multi_step_index, 1)
+        self.assertEqual(self.app.active_auto_cells, {(-3, 6), (0, 6)})
+        self.assertEqual(self.app.multi_droplet_visible, [True])
+        self.assertEqual(self.app.sim_droplets[0].cell, (0, 6))
+        self.assertIn((0, 6), self.app.detected_cells)
+
+    def test_corner_waste_pools_are_not_multi_sources(self):
+        self.app.loaded_reservoirs = {(-1, -1), (-3, 6)}
+
+        self.assertEqual(self.app._multi_source_cells(), {(-3, 6)})
+        self.assertEqual(self.app._multi_source_capacities(), {(-3, 6): 5})
 
     def test_loop_clear_target_buttons_clear_loop_path_points(self):
         self.app.operation_var.set(self.app.OP_LOOP)

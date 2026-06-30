@@ -1,7 +1,9 @@
+import time
 import unittest
 
 from dmf_simulation import (
     AStarPlanner,
+    CORNER_RESERVOIRS,
     GRID_COLS,
     GRID_ROWS,
     RESERVOIR_CELLS,
@@ -19,6 +21,7 @@ from dmf_simulation import (
     detection_in_cell,
     electrode_id,
     grid_polyline_cells,
+    in_pull_risk_zone,
     is_reservoir_cell,
     schedule_multi_paths,
     target_merge_region_map,
@@ -41,6 +44,13 @@ class DmfSimulationTests(unittest.TestCase):
         for row, col in RESERVOIR_CELLS:
             self.assertTrue(row < 0 or row >= GRID_ROWS or col < 0 or col >= GRID_COLS)
             self.assertTrue(is_reservoir_cell((row, col)))
+
+    def test_corner_reservoirs_are_waste_pools_not_multi_sources(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+
+        assignments = build_multi_droplet_assignments(CORNER_RESERVOIRS, [(4, 4)], planner)
+
+        self.assertEqual(assignments, [])
 
     def test_reservoir_electrode_ids_follow_pcb_cn_labels(self):
         expected = {
@@ -267,7 +277,7 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertEqual(len(build_multi_droplet_assignments([(-3, 6)], five_targets, planner)), 5)
         self.assertEqual(build_multi_droplet_assignments([(-3, 6)], six_targets, planner), [])
 
-    def test_higher_capacity_reservoir_is_selected_before_lower_capacity_one(self):
+    def test_source_capacity_limits_count_without_overriding_shorter_path(self):
         planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
         low_capacity_neck = (-1, 6)
         high_capacity_pool = (-3, 6)
@@ -280,7 +290,7 @@ class DmfSimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(len(assignments), 1)
-        self.assertEqual(assignments[0].source, high_capacity_pool)
+        self.assertEqual(assignments[0].source, low_capacity_neck)
 
     def test_single_reservoir_emits_next_droplet_after_previous_leaves(self):
         planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
@@ -325,6 +335,62 @@ class DmfSimulationTests(unittest.TestCase):
             both_at_goals = first == paths[0][-1] and second == paths[1][-1]
             if not both_at_goals:
                 self.assertGreater(max(abs(first[0] - second[0]), abs(first[1] - second[1])), 1)
+
+    def test_scheduler_staggers_rear_droplet_when_target_would_pull_front_back(self):
+        paths = [
+            [(0, 2), (0, 3), (0, 4)],
+            [(0, 0), (0, 1), (0, 2)],
+        ]
+
+        schedules = schedule_multi_paths(paths)
+
+        self.assertEqual(len(schedules), 2)
+        self.assertEqual(schedules[0][:3], paths[0])
+        self.assertEqual(schedules[1][0], (0, 0))
+        self.assertEqual(schedules[1][1], (0, 0))
+        self.assertEqual(schedules[1][2], (0, 1))
+
+    def test_near_target_waits_until_far_droplet_passes_shared_channel(self):
+        paths = [
+            [(0, 5), (0, 4), (0, 3), (0, 2), (0, 1), (0, 0)],
+            [(0, 5), (0, 4), (0, 3), (0, 2)],
+        ]
+
+        schedules = schedule_multi_paths(
+            paths,
+            merge_cells=[(0, 0), (0, 2)],
+            allow_settled_goal_adjacency=True,
+        )
+
+        self.assertEqual(len(schedules), 2)
+        far_at_shared = schedules[0].index((0, 2))
+        near_at_target = schedules[1].index((0, 2))
+        self.assertGreater(near_at_target, far_at_shared)
+        for step in range(max(len(schedule) for schedule in schedules)):
+            first = schedules[0][step] if step < len(schedules[0]) else schedules[0][-1]
+            second = schedules[1][step] if step < len(schedules[1]) else schedules[1][-1]
+            self.assertFalse(first is not None and first == second)
+
+    def test_near_target_waits_until_far_droplet_clears_pull_risk_zone(self):
+        paths = [
+            [(0, 5), (0, 4), (0, 3), (0, 2), (0, 1), (0, 0)],
+            [(2, 2), (1, 2)],
+        ]
+
+        schedules = schedule_multi_paths(
+            paths,
+            merge_cells=[(0, 0), (1, 2)],
+            allow_settled_goal_adjacency=True,
+        )
+
+        self.assertEqual(len(schedules), 2)
+        near_target_step = schedules[1].index((1, 2))
+        far_risk_steps = [
+            step
+            for step, cell in enumerate(schedules[0])
+            if in_pull_risk_zone(cell, (1, 2))
+        ]
+        self.assertGreater(near_target_step, max(far_risk_steps))
 
     def test_dense_letter_targets_are_split_into_parallel_rounds(self):
         planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
@@ -407,6 +473,222 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertTrue(any(start > 0 for starts in starts_by_source.values() for start in starts))
         for starts in starts_by_source.values():
             self.assertEqual(len(starts), len(set(starts)))
+
+    def test_sparse_letter_shape_schedule_keeps_transport_away_from_settled_targets(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, GRID_COLS + 2), (13, GRID_COLS + 2), (GRID_ROWS + 2, 6), (GRID_ROWS + 2, 13)]
+        c_shape = [(6, col) for col in (2, 4, 6)] + [(14, col) for col in (2, 4, 6)] + [(row, 2) for row in (8, 10, 12)]
+        s_shape = (
+            [(6, col) for col in (8, 10, 12)]
+            + [(10, col) for col in (8, 10, 12)]
+            + [(14, col) for col in (8, 10, 12)]
+            + [(8, 8), (12, 12)]
+        )
+        e_shape = (
+            [(6, col) for col in (14, 16, 18)]
+            + [(10, col) for col in (14, 16, 18)]
+            + [(14, col) for col in (14, 16, 18)]
+            + [(8, 14), (12, 14)]
+        )
+        assignments = build_multi_droplet_assignments(sources, c_shape + s_shape + e_shape, planner)
+
+        self.assertEqual(len(assignments), 31)
+        max_len = max(len(assignment.scheduled_path) for assignment in assignments)
+        for step in range(max_len):
+            settled_targets = []
+            moving = []
+            for assignment in assignments:
+                current = assignment.scheduled_path[step] if step < len(assignment.scheduled_path) else assignment.scheduled_path[-1]
+                if step == 0:
+                    previous = None
+                elif step - 1 < len(assignment.scheduled_path):
+                    previous = assignment.scheduled_path[step - 1]
+                else:
+                    previous = assignment.scheduled_path[-1]
+                if current is None:
+                    continue
+                if current == assignment.target and previous == current:
+                    settled_targets.append((assignment.droplet_id, current))
+                elif current != previous:
+                    moving.append((assignment.droplet_id, current, assignment.target))
+
+            for droplet_id, current, target in moving:
+                if current == target:
+                    continue
+                for settled_id, settled_cell in settled_targets:
+                    if droplet_id == settled_id:
+                        continue
+                    self.assertFalse(
+                        current == settled_cell or in_pull_risk_zone(current, settled_cell),
+                        f"D{droplet_id} moves through {current} near settled D{settled_id} at {settled_cell} on step {step}",
+                    )
+
+    def test_sparse_cse_planning_returns_quickly_for_saved_preset_shape(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, GRID_COLS + 2), (13, GRID_COLS + 2), (GRID_ROWS + 2, 6), (GRID_ROWS + 2, 13)]
+        c_shape = [(5, col) for col in (1, 3, 5)] + [(13, col) for col in (1, 3, 5)] + [(row, 1) for row in (7, 9, 11)]
+        s_shape = (
+            [(5, col) for col in (7, 9, 11)]
+            + [(9, col) for col in (7, 9, 11)]
+            + [(13, col) for col in (7, 9, 11)]
+            + [(7, 7), (11, 11)]
+        )
+        e_shape = (
+            [(5, col) for col in (14, 16, 18)]
+            + [(9, col) for col in (14, 16, 18)]
+            + [(13, col) for col in (14, 16, 18)]
+            + [(7, 14), (11, 14)]
+        )
+
+        start_time = time.perf_counter()
+        assignments = build_multi_droplet_assignments(sources, c_shape + s_shape + e_shape, planner)
+        elapsed = time.perf_counter() - start_time
+
+        self.assertLess(elapsed, 4.0)
+        self.assertEqual(len(assignments), 31)
+        stats = self._scheduled_motion_stats(assignments)
+        self.assertGreater(stats["max_moving"], 4)
+        self.assertLess(stats["steps"], 70)
+
+    def test_saved_cse_schedule_does_not_transport_through_parked_targets(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, GRID_COLS + 2), (13, GRID_COLS + 2), (GRID_ROWS + 2, 6), (GRID_ROWS + 2, 13)]
+        c_shape = [(5, col) for col in (1, 3, 5)] + [(13, col) for col in (1, 3, 5)] + [(row, 1) for row in (7, 9, 11)]
+        s_shape = (
+            [(5, col) for col in (7, 9, 11)]
+            + [(9, col) for col in (7, 9, 11)]
+            + [(13, col) for col in (7, 9, 11)]
+            + [(7, 7), (11, 11)]
+        )
+        e_shape = (
+            [(5, col) for col in (14, 16, 18)]
+            + [(9, col) for col in (14, 16, 18)]
+            + [(13, col) for col in (14, 16, 18)]
+            + [(7, 14), (11, 14)]
+        )
+
+        assignments = build_multi_droplet_assignments(sources, c_shape + s_shape + e_shape, planner)
+
+        self.assertEqual(len(assignments), 31)
+        self._assert_no_transport_through_parked_targets(assignments)
+
+    def test_zju_and_csc_letter_shapes_are_plannable_without_parked_target_crossing(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, GRID_COLS + 2), (13, GRID_COLS + 2), (GRID_ROWS + 2, 6), (GRID_ROWS + 2, 13)]
+        z_shape = (
+            [(5, col) for col in (1, 3, 5)]
+            + [(7, 5), (9, 3), (11, 1)]
+            + [(13, col) for col in (1, 3, 5)]
+        )
+        j_shape = (
+            [(5, col) for col in (8, 10, 12)]
+            + [(7, 12), (9, 12), (11, 12), (13, 12), (13, 10), (13, 8), (11, 8)]
+        )
+        u_shape = (
+            [(row, 15) for row in (5, 7, 9, 11)]
+            + [(row, 19) for row in (5, 7, 9, 11)]
+            + [(13, col) for col in (15, 17, 19)]
+        )
+        c_left = [(5, col) for col in (1, 3, 5)] + [(13, col) for col in (1, 3, 5)] + [(row, 1) for row in (7, 9, 11)]
+        s_mid = (
+            [(5, col) for col in (8, 10, 12)]
+            + [(9, col) for col in (8, 10, 12)]
+            + [(13, col) for col in (8, 10, 12)]
+            + [(7, 8), (11, 12)]
+        )
+        c_right = [(5, col) for col in (15, 17, 19)] + [(13, col) for col in (15, 17, 19)] + [(row, 15) for row in (7, 9, 11)]
+
+        for shape in (z_shape + j_shape + u_shape, c_left + s_mid + c_right):
+            assignments = build_multi_droplet_assignments(sources, shape, planner)
+            self.assertEqual(len(assignments), len(set(shape)))
+            self._assert_no_transport_through_parked_targets(assignments)
+            stats = self._scheduled_motion_stats(assignments)
+            self.assertGreater(stats["max_moving"], 4)
+
+    def test_sparse_cse_and_csc_use_dynamic_parallelism_instead_of_fixed_four_batches(self):
+        planner = AStarPlanner(rows=20, cols=20, valid_cells=LAYOUT_CELLS, extra_edges=RESERVOIR_CONNECTIONS)
+        sources = [(-3, 6), (-3, 13), (6, -3), (13, -3), (6, GRID_COLS + 2), (13, GRID_COLS + 2), (GRID_ROWS + 2, 6), (GRID_ROWS + 2, 13)]
+        c_shape = [(5, col) for col in (1, 3, 5)] + [(13, col) for col in (1, 3, 5)] + [(row, 1) for row in (7, 9, 11)]
+        s_shape = (
+            [(5, col) for col in (7, 9, 11)]
+            + [(9, col) for col in (7, 9, 11)]
+            + [(13, col) for col in (7, 9, 11)]
+            + [(7, 7), (11, 11)]
+        )
+        e_shape = (
+            [(5, col) for col in (14, 16, 18)]
+            + [(9, col) for col in (14, 16, 18)]
+            + [(13, col) for col in (14, 16, 18)]
+            + [(7, 14), (11, 14)]
+        )
+        c_left = [(5, col) for col in (1, 3, 5)] + [(13, col) for col in (1, 3, 5)] + [(row, 1) for row in (7, 9, 11)]
+        s_mid = (
+            [(5, col) for col in (8, 10, 12)]
+            + [(9, col) for col in (8, 10, 12)]
+            + [(13, col) for col in (8, 10, 12)]
+            + [(7, 8), (11, 12)]
+        )
+        c_right = [(5, col) for col in (15, 17, 19)] + [(13, col) for col in (15, 17, 19)] + [(row, 15) for row in (7, 9, 11)]
+
+        for shape in (c_shape + s_shape + e_shape, c_left + s_mid + c_right):
+            assignments = build_multi_droplet_assignments(sources, shape, planner)
+            stats = self._scheduled_motion_stats(assignments)
+
+            self.assertGreater(stats["max_moving"], 4)
+            self.assertLess(stats["steps"], 80)
+
+    def _assert_no_transport_through_parked_targets(self, assignments):
+        max_len = max(len(assignment.scheduled_path) for assignment in assignments)
+        for step in range(max_len):
+            settled_targets = []
+            moving = []
+            for assignment in assignments:
+                current = assignment.scheduled_path[step] if step < len(assignment.scheduled_path) else assignment.scheduled_path[-1]
+                if step == 0:
+                    previous = None
+                elif step - 1 < len(assignment.scheduled_path):
+                    previous = assignment.scheduled_path[step - 1]
+                else:
+                    previous = assignment.scheduled_path[-1]
+                if current is None:
+                    continue
+                if current == assignment.target and previous == current:
+                    settled_targets.append((assignment.droplet_id, current))
+                elif current != previous:
+                    moving.append((assignment.droplet_id, current, assignment.target))
+
+            for droplet_id, current, target in moving:
+                if current == target:
+                    continue
+                for settled_id, settled_cell in settled_targets:
+                    if droplet_id == settled_id:
+                        continue
+                    self.assertFalse(
+                        current == settled_cell or in_pull_risk_zone(current, settled_cell),
+                        f"D{droplet_id} moves through {current} near settled D{settled_id} at {settled_cell} on step {step}; target={target}",
+                    )
+
+    def _scheduled_motion_stats(self, assignments):
+        max_len = max(len(assignment.scheduled_path) for assignment in assignments)
+        moving_counts = []
+        for step in range(max_len):
+            moving = 0
+            for assignment in assignments:
+                current = assignment.scheduled_path[step] if step < len(assignment.scheduled_path) else assignment.scheduled_path[-1]
+                if step == 0:
+                    previous = None
+                elif step - 1 < len(assignment.scheduled_path):
+                    previous = assignment.scheduled_path[step - 1]
+                else:
+                    previous = assignment.scheduled_path[-1]
+                if current is not None and current != previous:
+                    moving += 1
+            moving_counts.append(moving)
+        return {
+            "steps": max_len - 1,
+            "max_moving": max(moving_counts) if moving_counts else 0,
+            "avg_moving": sum(moving_counts) / max(1, len(moving_counts)),
+        }
 
     def test_multi_scheduler_allows_same_cell_at_different_times(self):
         paths = [
