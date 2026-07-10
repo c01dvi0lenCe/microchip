@@ -54,6 +54,38 @@ class ArchitectureTests(unittest.TestCase):
         self.assertIs(schedule_multi_paths, scheduler_entrypoint)
         self.assertLessEqual(len(Path("dmf/planning/scheduler.py").read_text(encoding="utf-8").splitlines()), 700)
 
+    def test_upper_computer_controller_is_composed_from_focused_modules(self):
+        from app_controller import STM32MatrixController
+        from controllers.camera_controller import CameraControllerMixin
+        from controllers.canvas_controller import CanvasControllerMixin
+        from controllers.closed_loop_controller import ClosedLoopControllerMixin
+        from controllers.hardware_runtime import HardwareRuntimeMixin
+        from controllers.multi_runtime import MultiRuntimeMixin
+        from controllers.operation_planning import OperationPlanningMixin
+        from controllers.persistence_controller import PersistenceControllerMixin
+        from controllers.simulation_controller import SimulationControllerMixin
+        from controllers.task_control import TaskControlMixin
+        from controllers.ui_controller import UiControllerMixin
+
+        expected_modules = (
+            UiControllerMixin,
+            SimulationControllerMixin,
+            PersistenceControllerMixin,
+            HardwareRuntimeMixin,
+            CanvasControllerMixin,
+            OperationPlanningMixin,
+            TaskControlMixin,
+            MultiRuntimeMixin,
+            ClosedLoopControllerMixin,
+            CameraControllerMixin,
+        )
+        for module in expected_modules:
+            self.assertTrue(issubclass(STM32MatrixController, module))
+        self.assertLessEqual(len(Path("app_controller.py").read_text(encoding="utf-8").splitlines()), 420)
+        self.assertLessEqual(len(Path("controllers/task_control.py").read_text(encoding="utf-8").splitlines()), 600)
+        self.assertLessEqual(len(Path("controllers/multi_runtime.py").read_text(encoding="utf-8").splitlines()), 650)
+        self.assertLessEqual(len(Path("controllers/closed_loop_controller.py").read_text(encoding="utf-8").splitlines()), 750)
+
 
 if __name__ == "__main__":
     unittest.main()
