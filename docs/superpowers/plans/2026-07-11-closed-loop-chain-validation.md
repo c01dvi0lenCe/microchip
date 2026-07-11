@@ -74,4 +74,4 @@
 - [x] Run `python -m unittest discover -s tests -v`.
 - [x] Perform a Tkinter construction smoke test.
 - [x] Document that oscilloscope, logic-analyzer, and real-droplet validation remain user-run hardware steps.
-- [ ] Commit and push `codex/closed-loop-chain-validation`.
+- [x] Commit and push `codex/closed-loop-chain-validation`.
