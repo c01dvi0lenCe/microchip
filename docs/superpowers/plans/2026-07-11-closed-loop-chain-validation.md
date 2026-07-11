@@ -18,10 +18,10 @@
 - Modify: `controllers/hardware_runtime.py`
 - Create: `tests/test_electrode_transaction.py`
 
-- [ ] Write failing tests for command framing, monotonic sequences, ACK parsing, duplicate retry, timeout, and ALL_OFF.
-- [ ] Implement a transport-independent transaction client.
-- [ ] Integrate it into hardware mode while preserving legacy single SET commands for manual control.
-- [ ] Run focused and full controller tests.
+- [x] Write failing tests for command framing, monotonic sequences, ACK parsing, duplicate retry, timeout, and ALL_OFF.
+- [x] Implement a transport-independent transaction client.
+- [x] Integrate it into hardware mode while preserving legacy single SET commands for manual control.
+- [x] Run focused and full controller tests.
 
 ### Task 2: Separate electrical apply from visual arrival
 
@@ -32,10 +32,10 @@
 - Modify: `simulation/profiles.py`
 - Modify: `tests/test_main_controller.py`
 
-- [ ] Add failing tests proving ACK does not mean droplet arrival.
-- [ ] Add five-frame and 0.25 s stable-arrival confirmation.
-- [ ] Add 8 s hold, 4 s extension, one replan, and approximately 20 s protective pause.
-- [ ] Verify multi-droplet steps submit one dynamic batch rather than a fixed droplet count.
+- [x] Add failing tests proving ACK does not mean droplet arrival.
+- [x] Add five-frame and 0.25 s stable-arrival confirmation.
+- [x] Add 8 s hold, 4 s extension, one replan, and approximately 20 s protective pause.
+- [x] Verify multi-droplet steps submit one dynamic batch rather than a fixed droplet count.
 
 ### Task 3: Build the firmware scan digital twin
 
@@ -46,10 +46,10 @@
 - Create: `validation/closed_loop_chain/circuit_proxy.py`
 - Create: `tests/test_closed_loop_chain.py`
 
-- [ ] Model the 420-bit committed frame and transaction semantics.
-- [ ] Generate 20-row by 21-column blank/load/drive scan events at 300 Hz.
-- [ ] Sweep independent 300 Hz external-pulse phase over a full cycle.
-- [ ] Evaluate VSTORE and differential-voltage acceptance using the existing single-select parameters.
+- [x] Model the 420-bit committed frame and transaction semantics.
+- [x] Generate 20-row by 21-column blank/load/drive scan events at 300 Hz.
+- [x] Sweep independent 300 Hz external-pulse phase over a full cycle.
+- [x] Evaluate VSTORE and differential-voltage acceptance using the existing single-select parameters.
 
 ### Task 4: Replay representative DMF tasks
 
@@ -59,10 +59,10 @@
 - Create: `validation/closed_loop_chain/output/.gitkeep`
 - Modify: `tests/test_closed_loop_chain.py`
 
-- [ ] Replay move, mix, split, CSE, ZJU, and CSC schedules.
-- [ ] Record maximum changed electrodes per step, transaction bytes, estimated serial duration, total scheduling steps, and safety violations.
-- [ ] Keep only a concise Markdown summary and CSV in the output directory.
-- [ ] Run `python -m validation.closed_loop_chain.run_validation` and require all software acceptance checks to pass.
+- [x] Replay move, mix, split, CSE, ZJU, and CSC schedules.
+- [x] Record maximum changed electrodes per step, transaction bytes, estimated serial duration, total scheduling steps, and safety violations.
+- [x] Keep only a concise Markdown summary and CSV in the output directory.
+- [x] Run `python -m validation.closed_loop_chain.run_validation` and require all software acceptance checks to pass.
 
 ### Task 5: Verify and ship upper-computer changes
 
@@ -70,9 +70,8 @@
 - Modify: `README.md`
 - Modify: `docs/implementation-status.md`
 
-- [ ] Run `python -m compileall -q main.py app_controller.py controllers dmf simulation validation`.
-- [ ] Run `python -m unittest discover -s tests -v`.
-- [ ] Perform a Tkinter construction smoke test.
-- [ ] Document that oscilloscope, logic-analyzer, and real-droplet validation remain user-run hardware steps.
+- [x] Run `python -m compileall -q main.py app_controller.py controllers dmf simulation validation`.
+- [x] Run `python -m unittest discover -s tests -v`.
+- [x] Perform a Tkinter construction smoke test.
+- [x] Document that oscilloscope, logic-analyzer, and real-droplet validation remain user-run hardware steps.
 - [ ] Commit and push `codex/closed-loop-chain-validation`.
-

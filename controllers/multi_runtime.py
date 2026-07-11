@@ -24,6 +24,8 @@ class MultiRuntimeMixin:
             return
         self.multi_step_index = 0
         self.multi_step_start_time = time.monotonic()
+        self.step_extension_used = False
+        self.multi_arrival_confirmation.reset()
         self.sim_droplets = []
         self.multi_droplet_visible = []
         for assignment in self.multi_assignments:
@@ -96,7 +98,16 @@ class MultiRuntimeMixin:
         if not self._check_multi_visual_health(max_steps):
             return
 
-        if step_elapsed >= self.multi_step_duration_s:
+        expected_targets = self._scheduled_expected_target_cells(self.multi_assignments, next_step)
+        visually_confirmed = self.multi_arrival_confirmation.observe(
+            expected_targets,
+            self.detected_cells,
+            now,
+        )
+        if not expected_targets:
+            visually_confirmed = step_elapsed >= self.multi_step_duration_s
+
+        if visually_confirmed:
             for idx, assignment in enumerate(self.multi_assignments):
                 previous_cell = self._scheduled_cell_at(assignment.scheduled_path, self.multi_step_index)
                 cell = self._scheduled_cell_at(assignment.scheduled_path, next_step)
@@ -114,6 +125,8 @@ class MultiRuntimeMixin:
                         self.log(f"D{assignment.droplet_id} 从储液池 {self._cell_label(assignment.source)} 出滴")
             self.multi_step_index = next_step
             self.multi_step_start_time = now
+            self.step_extension_used = False
+            self.multi_arrival_confirmation.reset()
             self._set_auto_active_cells(self._multi_active_cells_for_phase(self.multi_step_index, 0.0))
             self.log_feedback(
                 "多液滴调度",
@@ -121,6 +134,24 @@ class MultiRuntimeMixin:
                 force=True,
             )
             self.log(f"多液滴调度步进 {self.multi_step_index}/{max_steps - 1}")
+        elif step_elapsed >= self.step_timeout_s + self.step_extension_s:
+            hold_cells = set(self.detected_cells) or {
+                droplet.cell
+                for idx, droplet in enumerate(self.sim_droplets)
+                if idx < len(self.multi_droplet_visible) and self.multi_droplet_visible[idx]
+            }
+            self._pause_multi_with_hold(
+                f"多液滴调度等待 {step_elapsed:.1f}s 仍未通过稳定视觉确认，已保护保持",
+                hold_cells,
+            )
+            return
+        elif step_elapsed >= self.step_timeout_s and not self.step_extension_used:
+            self.step_extension_used = True
+            self.log_feedback(
+                "多液滴调度",
+                f"初始等待 {self.step_timeout_s:.1f}s 未全部稳定到达，延长 {self.step_extension_s:.1f}s",
+                force=True,
+            )
 
         if self.multi_step_index >= max_steps - 1:
             self._render_sim_camera_frame()
@@ -147,6 +178,14 @@ class MultiRuntimeMixin:
 
     def _multi_active_cells_for_step(self, step):
         return self._multi_active_cells_for_phase(step, 0.0)
+
+    def _scheduled_expected_target_cells(self, assignments, step):
+        return {
+            cell
+            for assignment in assignments
+            for cell in (self._scheduled_cell_at(assignment.scheduled_path, step),)
+            if cell in CORE_CELLS
+        }
 
     def _loop_active_cells_for_phase(self, step, phase_progress):
         active = set()
@@ -352,7 +391,16 @@ class MultiRuntimeMixin:
                 )
 
         self._render_sim_camera_frame(force_display=False)
-        if step_elapsed >= self.multi_step_duration_s:
+        expected_targets = self._scheduled_expected_target_cells(self.loop_assignments, next_step)
+        visually_confirmed = self.multi_arrival_confirmation.observe(
+            expected_targets,
+            self.detected_cells,
+            now,
+        )
+        if not expected_targets:
+            visually_confirmed = step_elapsed >= self.multi_step_duration_s
+
+        if visually_confirmed:
             for idx, assignment in enumerate(self.loop_assignments):
                 cell = self._scheduled_cell_at(assignment.scheduled_path, next_step)
                 if cell is None:
@@ -362,12 +410,27 @@ class MultiRuntimeMixin:
                     self.sim_droplets[idx].reset(cell)
             self.multi_step_index = next_step
             self.multi_step_start_time = now
+            self.step_extension_used = False
+            self.multi_arrival_confirmation.reset()
             self._set_auto_active_cells(self._loop_active_cells_for_phase(self.multi_step_index, 0.0))
             self.log_feedback(
                 "多液滴循环",
                 f"调度步进 {self.multi_step_index}/{max_steps - 1}",
                 key="multi_loop_step",
                 interval_s=0.3,
+            )
+        elif step_elapsed >= self.step_timeout_s + self.step_extension_s:
+            self._pause_multi_with_hold(
+                f"多液滴循环等待 {step_elapsed:.1f}s 仍未通过稳定视觉确认，已保护保持",
+                set(self.detected_cells),
+            )
+            return
+        elif step_elapsed >= self.step_timeout_s and not self.step_extension_used:
+            self.step_extension_used = True
+            self.log_feedback(
+                "多液滴循环",
+                f"初始等待 {self.step_timeout_s:.1f}s 未全部稳定到达，延长 {self.step_extension_s:.1f}s",
+                force=True,
             )
 
         if self.multi_step_index >= max_steps - 1:
@@ -382,6 +445,8 @@ class MultiRuntimeMixin:
             return
         self.multi_step_index = 0
         self.multi_step_start_time = now
+        self.step_extension_used = False
+        self.multi_arrival_confirmation.reset()
         interval_s = self._sync_loop_interval_s()
         for idx, assignment in enumerate(self.loop_assignments):
             self.sim_droplets[idx].reset(assignment.source)

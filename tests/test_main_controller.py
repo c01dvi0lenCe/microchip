@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from controllers.arrival_confirmation import ArrivalConfirmationGate
+from controllers.electrode_transaction import TransactionResult
 from dmf_simulation import MultiDropletAssignment, SimulatedDroplet, StepEvent, electrode_id
 from main import STM32MatrixController
 
@@ -879,6 +881,24 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.sim_droplet.cell, self.app.mixing_path[1])
         self.assertEqual(len(self.app.sim_droplets), 1)
 
+    def test_merge_same_target_requires_one_merged_contour_not_one_early_droplet(self):
+        target = (4, 4)
+        self.app.arrival_confirmation = ArrivalConfirmationGate(stable_frames=1, minimum_duration_s=0.0)
+        self.app.path = [(4, 2), target]
+        self.app.merge_path_b = [(4, 6), target]
+        self.app.path_index = 0
+        self.app.path_index_b = 0
+        self.app.current_target_cell = target
+        self.app.current_target_cell_b = target
+        self.app.detected_cells = [target, (4, 5)]
+        self.app.latest_detections = [SimpleNamespace(cell=target), SimpleNamespace(cell=(4, 5))]
+
+        self.assertFalse(self.app._merge_targets_stably_detected({target}, time.monotonic()))
+
+        self.app.detected_cells = [target]
+        self.app.latest_detections = [SimpleNamespace(cell=target)]
+        self.assertTrue(self.app._merge_targets_stably_detected({target}, time.monotonic()))
+
     def test_split_operation_activates_only_side_electrodes(self):
         self.app.operation_var.set(self.app.OP_SPLIT)
         self.app.start_cell = (5, 5)
@@ -1046,8 +1066,10 @@ class MainControllerLayoutTests(unittest.TestCase):
 
     def test_simulation_timeouts_are_slower_than_visual_step(self):
         self.assertGreaterEqual(self.app.multi_step_duration_s, 1.0)
-        self.assertGreaterEqual(self.app.detection_timeout_s, self.app.multi_step_duration_s * 2)
-        self.assertGreater(self.app.step_timeout_s, self.app.detection_timeout_s)
+        self.assertEqual(self.app.step_timeout_s, 8.0)
+        self.assertEqual(self.app.step_extension_s, 4.0)
+        self.assertGreaterEqual(self.app.detection_timeout_s, self.app.step_timeout_s + self.app.step_extension_s)
+        self.assertEqual(self.app.protective_timeout_s, 20.0)
 
     def test_auto_switch_records_break_before_make_metrics(self):
         commands = []
@@ -1067,6 +1089,85 @@ class MainControllerLayoutTests(unittest.TestCase):
         )
         self.assertEqual(self.app.operation_metrics.electrode_switch_count, 2)
         self.assertEqual(self.app.operation_metrics.events[-1].stage, "DRIVE_TARGET")
+
+    def test_hardware_auto_switch_uses_one_atomic_delta_transaction(self):
+        submitted = []
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.active_auto_cells = {(3, 3)}
+        self.app.update_ui_only(electrode_id(3, 3, self.app.cols), 1)
+        self.app.electrode_transactions = SimpleNamespace(
+            apply_changes=lambda changes: submitted.append(dict(changes))
+            or TransactionResult(sequence=8, attempts=1, applied=True)
+        )
+
+        changed = self.app._set_auto_active_cells({(3, 4)})
+
+        self.assertTrue(changed)
+        self.assertEqual(
+            submitted,
+            [
+                {
+                    electrode_id(3, 3, self.app.cols): 0,
+                    electrode_id(3, 4, self.app.cols): 1,
+                }
+            ],
+        )
+        self.assertEqual(self.app.active_auto_cells, {(3, 4)})
+
+    def test_failed_hardware_transaction_does_not_change_displayed_state(self):
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.auto_running = True
+        self.app.active_auto_cells = {(3, 3)}
+        old_id = electrode_id(3, 3, self.app.cols)
+        new_id = electrode_id(3, 4, self.app.cols)
+        self.app.update_ui_only(old_id, 1)
+        self.app.electrode_transactions = SimpleNamespace(
+            apply_changes=lambda changes: TransactionResult(
+                sequence=9,
+                attempts=3,
+                applied=False,
+                error="APPLIED acknowledgement timeout",
+            ),
+            all_off=lambda: False,
+        )
+
+        changed = self.app._set_auto_active_cells({(3, 4)})
+
+        self.assertFalse(changed)
+        self.assertFalse(self.app.auto_running)
+        self.assertTrue(self.app.hardware_state_uncertain)
+        self.assertEqual(self.app.active_auto_cells, {(3, 3)})
+        self.assertEqual(self.app.buttons[old_id]["state"], 1)
+        self.assertEqual(self.app.buttons[new_id]["state"], 0)
+
+    def test_hardware_reset_uses_single_emergency_all_off(self):
+        calls = []
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.electrode_transactions = SimpleNamespace(
+            all_off=lambda: calls.append("ALL_OFF") or True
+        )
+        self.app.update_ui_only(1, 1)
+        self.app.update_ui_only(420, 1)
+
+        self.app.reset_all()
+
+        self.assertEqual(calls, ["ALL_OFF"])
+        self.assertEqual(self.app.active_channels, 0)
+
+    def test_hardware_camera_preview_never_uses_stm32_serial(self):
+        commands = []
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.send_command = lambda command, log_send=True: commands.append(command) or True
+
+        self.app.start_camera()
+
+        self.assertFalse(self.app.camera_running)
+        self.assertEqual(commands, [])
+        self.assertIn("相机适配器未配置", self.app.camera_label.cget("text"))
 
     def test_detection_dropout_counts_and_holds_before_timeout(self):
         self.app.operation_metrics = self.app._new_operation_metrics("move")

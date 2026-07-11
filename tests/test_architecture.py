@@ -29,6 +29,8 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(HardwareProtocol.set_electrode(23, False), "SET:23:0")
         self.assertFalse(hasattr(HardwareProtocol, "set_frequency"))
         self.assertFalse(hasattr(HardwareProtocol, "query_frequency"))
+        self.assertFalse(hasattr(HardwareProtocol, "camera_start"))
+        self.assertFalse(hasattr(HardwareProtocol, "camera_get"))
 
     def test_dmf_core_has_deep_modules_behind_compatibility_facade(self):
         import dmf_simulation

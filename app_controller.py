@@ -24,6 +24,8 @@ from controllers.closed_loop_controller import ClosedLoopControllerMixin
 from controllers.multi_runtime import MultiRuntimeMixin
 from controllers.operation_planning import OperationPlanningMixin
 from controllers.camera_controller import CameraControllerMixin
+from controllers.arrival_confirmation import ArrivalConfirmationGate
+from controllers.electrode_transaction import ElectrodeTransactionClient
 from controllers.task_control import TaskControlMixin
 
 
@@ -77,10 +79,19 @@ class STM32MatrixController(
 
         self.ser = None
         self.is_connected = False
+        self.hardware_state_uncertain = False
+        self.hardware_auto_owned = False
         self.active_channels = 0
         self.stop_event = threading.Event()
+        self.electrode_transactions = ElectrodeTransactionClient(
+            self._send_transaction_line,
+            electrode_count=self.total_channels,
+            ack_timeout_s=0.45,
+            max_retries=2,
+        )
 
         self.camera_running = False
+        self.hardware_camera_adapter = None
         self.camera_thread = None
         self.camera_after_id = None
         self.auto_after_id = None
@@ -178,8 +189,13 @@ class STM32MatrixController(
         self.step_start_time = 0.0
         self.step_replanned = False
         self.drop_frame_until = 0.0
-        self.detection_timeout_s = 2.5
-        self.step_timeout_s = 4.0
+        self.arrival_confirmation = ArrivalConfirmationGate(stable_frames=5, minimum_duration_s=0.25)
+        self.multi_arrival_confirmation = ArrivalConfirmationGate(stable_frames=5, minimum_duration_s=0.25)
+        self.detection_timeout_s = 12.0
+        self.step_timeout_s = 8.0
+        self.step_extension_s = 4.0
+        self.protective_timeout_s = 20.0
+        self.step_extension_used = False
         self.recovery_attempts = 0
         self.max_recovery_attempts = 3
         self.feedback_log_times = {}

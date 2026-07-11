@@ -7,15 +7,3 @@ class HardwareProtocol:
     @staticmethod
     def set_electrode(electrode_id: int, state: bool | int) -> str:
         return f"SET:{electrode_id}:{1 if state else 0}"
-
-    @staticmethod
-    def camera_start() -> str:
-        return "CAMERA:START"
-
-    @staticmethod
-    def camera_stop() -> str:
-        return "CAMERA:STOP"
-
-    @staticmethod
-    def camera_get() -> str:
-        return "CAMERA:GET"

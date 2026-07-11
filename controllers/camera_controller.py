@@ -1,19 +1,14 @@
-"""Simulation preview and the placeholder hardware-camera adapter."""
+"""Simulation preview and a PC-side industrial-camera adapter seam."""
 
 from __future__ import annotations
 
 from .common import (
     CAMERA_DISPLAY_INTERVAL_S,
     CAMERA_PREVIEW_MAX_PX,
-    HardwareProtocol,
     Image,
-    ImageDraw,
-    ImageFont,
     ImageTk,
     MATRIX_DISPLAY_INTERVAL_S,
     RESAMPLE_FILTER,
-    messagebox,
-    threading,
     time,
 )
 
@@ -72,15 +67,19 @@ class CameraControllerMixin:
             self._camera_preview_loop()
             return
 
-        if not self.is_connected:
-            messagebox.showwarning("提示", "请先连接 STM32 设备")
+        adapter = getattr(self, "hardware_camera_adapter", None)
+        if adapter is None:
+            self.camera_running = False
+            self.camera_label.config(
+                image="",
+                text="工业相机适配器未配置（相机应通过 USB3/SDK 直连电脑）",
+                font=(self.font_family, 12),
+                fg=self.colors["muted"],
+            )
+            self.camera_label.image = None
+            self.log("实物预览未启动：工业相机适配器未配置，不会向 STM32 发送相机命令")
             return
-        self.send_command(HardwareProtocol.camera_start())
-        self.camera_running = True
-        self.btn_camera.config(text="关闭预览", bg=self.colors["danger"], activebackground=self.colors["danger_hover"])
-        self.camera_thread = threading.Thread(target=self.update_camera, daemon=True)
-        self.camera_thread.start()
-        self.log("STM32 摄像头预览已开启")
+        self.log("工业相机适配器已提供；实时 SDK 采集将在相机选型确定后接入")
 
     def stop_camera(self):
         if self.auto_running:
@@ -91,8 +90,6 @@ class CameraControllerMixin:
             except Exception:
                 pass
             self.camera_after_id = None
-        if not self.is_simulation_mode() and self.is_connected:
-            self.send_command(HardwareProtocol.camera_stop())
         self.camera_running = False
         if self.camera_thread:
             self.camera_thread.join(timeout=1)
@@ -107,26 +104,6 @@ class CameraControllerMixin:
             return
         self._render_sim_camera_frame(force_display=False)
         self.camera_after_id = self.root.after(120, self._camera_preview_loop)
-
-    def update_camera(self):
-        while self.camera_running and self.is_connected and not self.stop_event.is_set():
-            self.send_command(HardwareProtocol.camera_get(), log_send=False)
-            image = self._generate_test_image()
-            self.root.after(0, self._update_camera_from_image, image)
-            time.sleep(0.2)
-
-    def _generate_test_image(self):
-        width, height = 640, 480
-        image = Image.new("RGB", (width, height), color="white")
-        draw = ImageDraw.Draw(image)
-        try:
-            font = ImageFont.truetype("arial.ttf", 18)
-        except Exception:
-            font = ImageFont.load_default()
-        draw.text((18, 18), "Hardware camera interface placeholder", fill="black", font=font)
-        draw.text((18, 48), f"Time: {time.strftime('%H:%M:%S')}", fill="black", font=font)
-        draw.text((18, 78), "Use upper-computer OpenCV for closed-loop feedback", fill="black", font=font)
-        return image
 
     def _update_camera_from_image(self, image):
         label_w = self.camera_label.winfo_width()

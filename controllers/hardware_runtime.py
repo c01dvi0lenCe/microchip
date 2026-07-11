@@ -18,7 +18,7 @@ class HardwareRuntimeMixin:
             self.btn_refresh.config(state="normal")
             self.btn_connect.config(state="normal")
             self._set_connection_state(self.is_connected, self.port_combobox.get())
-            self.auto_status_label.config(text="闭环: 实物模式仅手动", fg=self.colors["muted"])
+            self.auto_status_label.config(text="闭环: 实物待机（相机适配器未配置）", fg=self.colors["muted"])
 
     def _set_connection_state(self, connected, port_name=""):
         self.is_connected = connected
@@ -67,7 +67,16 @@ class HardwareRuntimeMixin:
                 except Exception:
                     pass
                 self._set_connection_state(True, port)
-                self.log(f"成功连接到 {port}")
+                if not self.electrode_transactions.all_off():
+                    self.hardware_state_uncertain = True
+                    self.log(f"连接到 {port}，但会话同步 ALL_OFF 未确认，已断开")
+                    self.ser.close()
+                    self._set_connection_state(False)
+                    return
+                self.hardware_state_uncertain = False
+                self.hardware_auto_owned = False
+                self._clear_local_electrode_display()
+                self.log(f"成功连接到 {port}，STM32 已确认 ALL_OFF，会话序列已同步")
             except Exception as exc:
                 messagebox.showerror("错误", str(exc))
         else:
@@ -98,9 +107,48 @@ class HardwareRuntimeMixin:
             self.log(f"未发送(串口未连接) -> {command}")
         return False
 
+    def _send_transaction_line(self, command):
+        return self.send_command(command, log_send=False)
+
+    def _submit_auto_electrode_changes(self, changes):
+        if self.is_simulation_mode() or not changes:
+            return True
+        result = self.electrode_transactions.apply_changes(changes)
+        if result.applied:
+            self.hardware_auto_owned = True
+            self.log_feedback(
+                "批量提交",
+                f"事务 {result.sequence} 已在扫描帧边界生效，尝试 {result.attempts} 次",
+                key="electrode_transaction_applied",
+                interval_s=0.2,
+            )
+            return True
+
+        self.auto_running = False
+        emergency_off = self.electrode_transactions.all_off()
+        if emergency_off:
+            self.hardware_state_uncertain = False
+            self.hardware_auto_owned = False
+            self._clear_local_electrode_display()
+            status = "闭环: 通信失败，已安全全关"
+        else:
+            self.hardware_state_uncertain = True
+            self.hardware_auto_owned = True
+            status = "闭环: 通信中断，硬件状态未知"
+        self.auto_status_label.config(text=status, fg=self.colors["danger"])
+        self.log_feedback(
+            "通信保护",
+            f"事务 {result.sequence} 未确认生效：{result.error}；"
+            + ("已确认 ALL_OFF" if emergency_off else "ALL_OFF 也未确认，禁止手动操作"),
+            force=True,
+        )
+        return False
+
     def toggle_electrode(self, eid):
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
+            return
+        if self._hardware_manual_control_blocked():
             return
         current_state = self.buttons[eid]["state"]
         new_state = 1 if current_state == 0 else 0
@@ -112,6 +160,8 @@ class HardwareRuntimeMixin:
     def _set_electrode_state(self, eid, state, log_send=True):
         if eid not in self.buttons:
             return
+        if self._hardware_manual_control_blocked():
+            return
         state = 1 if state else 0
         if self.buttons[eid]["state"] == state:
             return
@@ -121,6 +171,8 @@ class HardwareRuntimeMixin:
     def manual_toggle_electrode(self, cell, additive=False):
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
+            return
+        if self._hardware_manual_control_blocked():
             return
         eid = electrode_id(cell[0], cell[1], self.cols)
         active_ids = self._active_electrode_ids()
@@ -143,15 +195,53 @@ class HardwareRuntimeMixin:
             self._set_electrode_state(active_id, 0)
         self._set_electrode_state(eid, 1)
 
-    def reset_all(self):
-        if self.auto_running:
-            self.stop_auto_control("全部关闭")
-        self.log("正在关闭所有电极...")
+    def _hardware_manual_control_blocked(self):
+        if self.is_simulation_mode():
+            return False
+        if self.hardware_state_uncertain:
+            self.log("硬件状态未知，禁止手动操作；请重新连接并确认 ALL_OFF")
+            return True
+        if self.hardware_auto_owned:
+            self.log("PC 自动控制仍占有电极；请先全部关闭以释放手动控制")
+            return True
+        return False
+
+    def _clear_local_electrode_display(self):
         for info in self.buttons.values():
             info["state"] = 0
         self.active_auto_cells = set()
         self._set_active_count(0)
         self._draw_matrix_canvas()
+
+    def _release_hardware_auto_ownership(self):
+        if self.is_simulation_mode() or not self.hardware_auto_owned:
+            return True
+        if not self.is_connected or not self.electrode_transactions.all_off():
+            self.hardware_state_uncertain = True
+            self.log("自动任务结束时 ALL_OFF 未确认，硬件状态未知并保持手动锁定")
+            return False
+        self.hardware_state_uncertain = False
+        self.hardware_auto_owned = False
+        self._clear_local_electrode_display()
+        self.log("自动任务结束：STM32 已确认 ALL_OFF，手动控制已释放")
+        return True
+
+    def reset_all(self):
+        if self.auto_running:
+            self.stop_auto_control("全部关闭")
+        self.log("正在关闭所有电极...")
+
+        if not self.is_simulation_mode() and self.is_connected:
+            if not self.electrode_transactions.all_off():
+                self.hardware_state_uncertain = True
+                self.hardware_auto_owned = True
+                self.log("紧急 ALL_OFF 未收到确认，硬件电极状态未知")
+                self.auto_status_label.config(text="闭环: 硬件状态未知", fg=self.colors["danger"])
+                return
+            self.hardware_state_uncertain = False
+            self.hardware_auto_owned = False
+
+        self._clear_local_electrode_display()
 
         if self.is_simulation_mode():
             self.log("仿真后端 -> 全部电极关闭")
@@ -160,10 +250,7 @@ class HardwareRuntimeMixin:
         if not self.is_connected:
             self.log("串口未连接，仅关闭本地显示")
             return
-        for eid in range(1, self.total_channels + 1):
-            self.send_command(HardwareProtocol.set_electrode(eid, 0), log_send=False)
-            time.sleep(0.005)
-        self.log("已向 STM32 发送全部关闭命令")
+        self.log("STM32 已确认紧急 ALL_OFF")
 
     def update_ui_only(self, eid, state):
         if eid not in self.buttons:
@@ -183,7 +270,10 @@ class HardwareRuntimeMixin:
                     if self.ser.in_waiting:
                         line = self.ser.readline().decode("utf-8", errors="ignore").strip()
                         if line:
-                            if line.startswith("SYNC:"):
+                            if self.electrode_transactions.feed_line(line):
+                                if line.startswith("ERR:"):
+                                    self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
+                            elif line.startswith("SYNC:"):
                                 parts = line.split(":")
                                 if len(parts) == 3:
                                     try:

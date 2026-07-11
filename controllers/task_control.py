@@ -77,6 +77,9 @@ class TaskControlMixin:
         self.last_auto_update_time = now
         self.last_detection_time = now
         self.step_replanned = False
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
+        self.multi_arrival_confirmation.reset()
         self.recovery_attempts = 0
         self.feedback_log_times.clear()
         self._prepare_operation_start()
@@ -99,6 +102,7 @@ class TaskControlMixin:
                 pass
             self.auto_after_id = None
         self._set_auto_active_cells(set())
+        self._release_hardware_auto_ownership()
         self.current_target_cell = None
         self.current_target_cell_b = None
         self.mixing_active = False

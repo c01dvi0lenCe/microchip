@@ -26,6 +26,8 @@ class ClosedLoopControllerMixin:
         target = self.path[self.path_index + 1]
         self.current_target_cell = target
         self.step_start_time = time.monotonic()
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
         self.log_feedback("状态机", f"释放当前电极 {self._cell_label(current)}", force=True)
         self._set_auto_active_cells({target}, stage="DRIVE_TARGET", action="drive")
         self.log_feedback("状态机", f"开启目标电极 {self._cell_label(target)}，等待视觉确认", force=True)
@@ -48,6 +50,8 @@ class ClosedLoopControllerMixin:
             active.add(self.current_target_cell_b)
 
         self.step_start_time = time.monotonic()
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
         self._set_auto_active_cells(active)
         self.log(
             "混合汇合步进："
@@ -74,6 +78,8 @@ class ClosedLoopControllerMixin:
         target = self.mixing_path[self.mixing_index + 1]
         self.current_target_cell = target
         self.step_start_time = time.monotonic()
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
         self.log_feedback("状态机", f"释放当前电极 {self._cell_label(current)}", force=True)
         self._set_auto_active_cells({target}, stage="DRIVE_TARGET", action="drive")
         self.log_feedback("状态机", f"开启目标电极 {self._cell_label(target)}，等待视觉确认", force=True)
@@ -87,6 +93,7 @@ class ClosedLoopControllerMixin:
         self.sim_droplets = [self.sim_droplet]
         self.step_start_time = time.monotonic()
         self.last_detection_time = self.step_start_time
+        self.arrival_confirmation.reset()
         self.current_target_cell = self.split_left_cell
         self.current_target_cell_b = self.split_right_cell
         self._set_auto_active_cells({self.split_left_cell, self.split_right_cell})
@@ -101,6 +108,8 @@ class ClosedLoopControllerMixin:
         if self.loop_assignments:
             self.multi_step_index = 0
             self.multi_step_start_time = time.monotonic()
+            self.step_extension_used = False
+            self.multi_arrival_confirmation.reset()
             self.sim_droplets = []
             self.multi_droplet_visible = []
             for assignment in self.loop_assignments:
@@ -165,7 +174,10 @@ class ClosedLoopControllerMixin:
                 )
                 self._recover_single_droplet(detection.cell, now, "检测到液滴偏离计划电极")
                 return
-            if self.current_target_cell is not None and detection_in_cell(detection, self.current_target_cell):
+            if (
+                self.current_target_cell is not None
+                and self._single_target_stably_detected(detection, self.current_target_cell, now)
+            ):
                 self.log_feedback(
                     "移动",
                     f"视觉确认进入 {self._cell_label(self.current_target_cell)}，推进到下一步",
@@ -174,7 +186,7 @@ class ClosedLoopControllerMixin:
                 self._handle_step_reached()
 
         if self.auto_running and self.current_target_cell is not None:
-            if now - self.step_start_time > self.step_timeout_s:
+            if self._step_wait_expired(now):
                 self.log_feedback(
                     "移动纠偏",
                     f"{self._cell_label(self.current_target_cell)} 未在 {self.step_timeout_s:.1f}s 内到达，触发超时重规划",
@@ -213,7 +225,10 @@ class ClosedLoopControllerMixin:
                 )
                 self.stop_auto_control("循环液滴偏离当前/下一目标电极")
                 return
-            if self.current_target_cell is not None and detection_in_cell(detection, self.current_target_cell):
+            if (
+                self.current_target_cell is not None
+                and self._single_target_stably_detected(detection, self.current_target_cell, now)
+            ):
                 self.log_feedback(
                     "循环",
                     f"视觉确认进入 {self._cell_label(self.current_target_cell)}，推进循环路径",
@@ -222,7 +237,7 @@ class ClosedLoopControllerMixin:
                 self._handle_loop_step_reached()
 
         if self.auto_running and self.current_target_cell is not None:
-            if now - self.step_start_time > self.step_timeout_s:
+            if self._step_wait_expired(now):
                 self.log_feedback(
                     "循环纠偏",
                     f"{self._cell_label(self.current_target_cell)} 未在 {self.step_timeout_s:.1f}s 内到达，停止循环",
@@ -254,15 +269,17 @@ class ClosedLoopControllerMixin:
         if not self.auto_running:
             return
 
-        advanced = False
-        if self.current_target_cell is not None and self.sim_droplet.cell == self.current_target_cell:
+        expected_targets = set()
+        if self.path_index < len(self.path) - 1 and self.current_target_cell is not None:
+            expected_targets.add(self.current_target_cell)
+        if self.path_index_b < len(self.merge_path_b) - 1 and self.current_target_cell_b is not None:
+            expected_targets.add(self.current_target_cell_b)
+        advanced = self._merge_targets_stably_detected(expected_targets, now)
+        if advanced:
             if self.path_index < len(self.path) - 1:
                 self.path_index += 1
-                advanced = True
-        if self.current_target_cell_b is not None and self.sim_droplet_b.cell == self.current_target_cell_b:
             if self.path_index_b < len(self.merge_path_b) - 1:
                 self.path_index_b += 1
-                advanced = True
 
         done_a = self.path_index >= len(self.path) - 1
         done_b = self.path_index_b >= len(self.merge_path_b) - 1
@@ -273,13 +290,31 @@ class ClosedLoopControllerMixin:
         if advanced:
             self.log_feedback(
                 "混合",
-                f"至少一路液滴到达当前目标，推进 A:{self.path_index}/{len(self.path) - 1} B:{self.path_index_b}/{len(self.merge_path_b) - 1}",
+                f"两路当前目标均通过稳定视觉确认，推进 A:{self.path_index}/{len(self.path) - 1} B:{self.path_index_b}/{len(self.merge_path_b) - 1}",
                 force=True,
             )
             self._begin_merge_step()
-        elif now - self.step_start_time > self.step_timeout_s:
+        elif self._step_wait_expired(now):
             self.log_feedback("混合纠偏", "混合汇合单步超时，进入停止保护", force=True)
             self.stop_auto_control("混合汇合单步超时")
+
+    def _merge_targets_stably_detected(self, expected_targets, now):
+        both_moving_to_same_target = (
+            self.path_index < len(self.path) - 1
+            and self.path_index_b < len(self.merge_path_b) - 1
+            and self.current_target_cell is not None
+            and self.current_target_cell == self.current_target_cell_b
+        )
+        if both_moving_to_same_target:
+            detected = (
+                set(expected_targets)
+                if len(self.latest_detections) == 1
+                and self.detected_cells == [self.current_target_cell]
+                else set()
+            )
+        else:
+            detected = set(self.detected_cells)
+        return self.arrival_confirmation.observe(expected_targets, detected, now)
 
     def _mixing_auto_step(self, now, dt_s):
         if self.current_target_cell is not None and self.mixing_index < len(self.mixing_path) - 1:
@@ -290,11 +325,15 @@ class ClosedLoopControllerMixin:
                 weak_fault_cells=self._weak_fault_cells_for_run(),
             )
 
-        self._render_and_check_detection(now)
+        detection = self._render_and_check_detection(now)
         if not self.auto_running:
             return
 
-        if self.current_target_cell is not None and self.sim_droplet.cell == self.current_target_cell:
+        if (
+            detection is not None
+            and self.current_target_cell is not None
+            and self._single_target_stably_detected(detection, self.current_target_cell, now)
+        ):
             self.mixing_index += 1
             if self.mixing_index >= len(self.mixing_path) - 1:
                 self.stop_auto_control("混合完成，四宫格循环结束")
@@ -305,7 +344,7 @@ class ClosedLoopControllerMixin:
                 force=True,
             )
             self._begin_mixing_step()
-        elif now - self.step_start_time > self.step_timeout_s:
+        elif self._step_wait_expired(now):
             self.log_feedback("混合纠偏", "四宫格混合单步超时，进入停止保护", force=True)
             self.stop_auto_control("四宫格混合单步超时")
 
@@ -370,7 +409,7 @@ class ClosedLoopControllerMixin:
             return
 
         if self.split_progress >= 1.0:
-            if self._split_success_detected():
+            if self._split_success_detected(now):
                 self.log_feedback("分裂", "视觉确认两个子滴稳定，关闭源电极并保持左右目标", force=True)
                 self.sim_droplet.reset(self.split_left_cell)
                 self.sim_droplet_b.reset(self.split_right_cell)
@@ -379,6 +418,14 @@ class ClosedLoopControllerMixin:
                 self._render_sim_camera_frame()
                 self.stop_auto_control("分裂完成，已生成两个子液滴")
                 return
+            if not forced_failure_active and now - self.step_start_time < self.split_stretch_duration_s + 0.35:
+                self.log_feedback(
+                    "分裂",
+                    f"已形成两侧候选子滴，稳定帧 {self.arrival_confirmation.stable_count}/5，继续保持两侧电极",
+                    key="split_stable_wait",
+                    interval_s=0.2,
+                )
+                return
             self._handle_split_not_separated(now)
             return
 
@@ -386,15 +433,14 @@ class ClosedLoopControllerMixin:
             self.log_feedback("分裂纠偏", "分裂过程超时，按未拉开处理并准备重拉", force=True)
             self._handle_split_not_separated(now)
 
-    def _split_success_detected(self):
+    def _split_success_detected(self, now):
         if self.split_forced_failures_remaining > 0:
             self.split_forced_failures_remaining -= 1
             return False
-        detected = set(self.detected_cells)
-        return (
-            len(self.latest_detections) >= 2
-            and self.split_left_cell in detected
-            and self.split_right_cell in detected
+        return self.arrival_confirmation.observe(
+            {self.split_left_cell, self.split_right_cell},
+            self.detected_cells,
+            now,
         )
 
     def _handle_split_not_separated(self, now):
@@ -411,6 +457,7 @@ class ClosedLoopControllerMixin:
         self.split_attempts += 1
         self.split_progress = 0.0
         self.step_start_time = now
+        self.arrival_confirmation.reset()
         self.split_retry_release_until = now + self.split_relax_duration_s
         self.sim_droplet.reset(self.start_cell)
         self.sim_droplets = [self.sim_droplet]
@@ -441,6 +488,33 @@ class ClosedLoopControllerMixin:
             self.log_feedback("视觉", "检测丢失超过阈值，停止闭环并关闭自动推进", force=True)
             self.stop_auto_control(f"检测丢失超过 {self.detection_timeout_s:.1f} s")
         return None
+
+    def _single_target_stably_detected(self, detection, target, now):
+        detected = {target} if detection_in_cell(detection, target) else set()
+        confirmed = self.arrival_confirmation.observe({target}, detected, now)
+        if not confirmed and detected:
+            self.log_feedback(
+                "视觉确认",
+                f"{self._cell_label(target)} 稳定帧 {self.arrival_confirmation.stable_count}/5，继续保持目标电极",
+                key="arrival_stability",
+                interval_s=0.2,
+            )
+        return confirmed
+
+    def _step_wait_expired(self, now):
+        elapsed = now - self.step_start_time
+        if self.step_replanned:
+            return elapsed >= self.step_timeout_s
+        if elapsed >= self.step_timeout_s + self.step_extension_s:
+            return True
+        if elapsed >= self.step_timeout_s and not self.step_extension_used:
+            self.step_extension_used = True
+            self.log_feedback(
+                "状态机",
+                f"初始等待 {self.step_timeout_s:.1f}s 未稳定到达，延长驱动 {self.step_extension_s:.1f}s",
+                force=True,
+            )
+        return False
 
     def _single_detection_on_track(self, detection):
         expected = []
@@ -476,6 +550,8 @@ class ClosedLoopControllerMixin:
         self.current_target_cell_b = None
         self.step_replanned = True
         self.step_start_time = now
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
         self._set_auto_active_cells({self.current_target_cell})
         self.log_feedback(
             "移动纠偏",
@@ -569,6 +645,8 @@ class ClosedLoopControllerMixin:
         self.current_target_cell_b = None
         self.step_replanned = True
         self.step_start_time = now
+        self.step_extension_used = False
+        self.arrival_confirmation.reset()
         self._set_auto_active_cells({self.current_target_cell})
         self.log_feedback(
             "移动纠偏",
@@ -583,14 +661,29 @@ class ClosedLoopControllerMixin:
         new_cells = set(cells)
         off_cells = old_cells - new_cells
         on_cells = new_cells - old_cells
+        changes = {
+            electrode_id(cell[0], cell[1], self.cols): 0
+            for cell in off_cells
+        }
+        changes.update(
+            {
+                electrode_id(cell[0], cell[1], self.cols): 1
+                for cell in on_cells
+            }
+        )
+        if changes and not self._submit_auto_electrode_changes(changes):
+            return False
+
         for cell in off_cells:
             eid = electrode_id(cell[0], cell[1], self.cols)
             self.update_ui_only(eid, 0)
-            self.send_command(HardwareProtocol.set_electrode(eid, 0), log_send=False)
+            if self.is_simulation_mode():
+                self.send_command(HardwareProtocol.set_electrode(eid, 0), log_send=False)
         for cell in on_cells:
             eid = electrode_id(cell[0], cell[1], self.cols)
             self.update_ui_only(eid, 1)
-            self.send_command(HardwareProtocol.set_electrode(eid, 1), log_send=False)
+            if self.is_simulation_mode():
+                self.send_command(HardwareProtocol.set_electrode(eid, 1), log_send=False)
         self.active_auto_cells = new_cells
         if on_cells or off_cells:
             target_cell = sorted(on_cells)[0] if on_cells else None
@@ -608,3 +701,4 @@ class ClosedLoopControllerMixin:
                 key="auto_switch_summary",
                 interval_s=0.2,
             )
+        return True
