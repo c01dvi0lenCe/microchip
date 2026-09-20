@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 from controllers.electrode_transaction import ElectrodeTransactionClient
@@ -6,13 +7,14 @@ from controllers.electrode_transaction import ElectrodeTransactionClient
 class ElectrodeTransactionClientTests(unittest.TestCase):
     def make_loopback(self, *, drop_first_commit=False):
         sent = []
-        state = {"commit_count": 0}
+        state = {"commit_count": 0, "sequence": ""}
         client = None
 
         def send_line(line):
             sent.append(line)
             sequence = line.split(":", 1)[1] if ":" in line else ""
             if line.startswith("BEGIN:"):
+                state["sequence"] = sequence
                 if drop_first_commit and state["commit_count"] == 1:
                     client.feed_line(f"ACK:{sequence}:APPLIED")
                 else:
@@ -22,6 +24,9 @@ class ElectrodeTransactionClientTests(unittest.TestCase):
                 client.feed_line(f"ACK:{sequence}:QUEUED")
                 if not drop_first_commit or state["commit_count"] > 1:
                     client.feed_line(f"ACK:{sequence}:APPLIED")
+            elif line.startswith("SET:"):
+                parts = line.split(":")
+                client.feed_line(f"ACK:{state['sequence']}:SET:{parts[1]}")
             elif line == "ALL_OFF":
                 client.feed_line("ACK:ALL_OFF")
             return True
@@ -83,6 +88,44 @@ class ElectrodeTransactionClientTests(unittest.TestCase):
         self.assertEqual(result.attempts, 3)
         self.assertEqual(sent, ["BEGIN:1", "BEGIN:1", "BEGIN:1"])
 
+    def test_waits_for_set_ack_before_commit(self):
+        sent = []
+        commit_before_set_ack = False
+        set_ack_sent = False
+        client = None
+
+        def send_set_ack():
+            nonlocal set_ack_sent
+            set_ack_sent = True
+            client.feed_line("ACK:1:SET:5")
+
+        def send_line(line):
+            nonlocal commit_before_set_ack
+            sent.append(line)
+            if line == "BEGIN:1":
+                client.feed_line("ACK:1:BEGIN")
+            elif line == "SET:5:1":
+                timer = threading.Timer(0.01, send_set_ack)
+                timer.daemon = True
+                timer.start()
+            elif line == "COMMIT:1":
+                commit_before_set_ack = not set_ack_sent
+                client.feed_line("ACK:1:APPLIED")
+            return True
+
+        client = ElectrodeTransactionClient(
+            send_line,
+            ack_timeout_s=0.1,
+            max_retries=0,
+            initial_sequence=1,
+        )
+
+        result = client.apply_changes({5: 1})
+
+        self.assertTrue(result.applied)
+        self.assertFalse(commit_before_set_ack)
+        self.assertEqual(sent, ["BEGIN:1", "SET:5:1", "COMMIT:1"])
+
     def test_rejects_invalid_changes_before_sending(self):
         client, sent = self.make_loopback()
 
@@ -117,6 +160,8 @@ class ElectrodeTransactionClientTests(unittest.TestCase):
                 begin_count += 1
                 if begin_count > 1:
                     client.feed_line("ACK:1:BEGIN")
+            elif line == "SET:3:1":
+                client.feed_line("ACK:1:SET:3")
             elif line == "COMMIT:1":
                 client.feed_line("ACK:1:APPLIED")
             return True

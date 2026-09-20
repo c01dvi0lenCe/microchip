@@ -124,6 +124,23 @@ class DmfSimulationTests(unittest.TestCase):
 
         self.assertEqual(tuple(int(channel) for channel in frame[y, x]), (182, 91, 77))
 
+    def test_camera_active_core_cell_uses_full_grid_cell_bounds(self):
+        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
+        left, top = camera.grid_origin_px
+        cell_size = camera.cell_size_px
+
+        bbox = camera._cell_bbox_px((5, 7))
+
+        self.assertEqual(
+            bbox,
+            (
+                int(round(left + 7 * cell_size)),
+                int(round(top + 5 * cell_size)),
+                int(round(left + 8 * cell_size)),
+                int(round(top + 6 * cell_size)),
+            ),
+        )
+
     def test_astar_returns_empty_when_no_path_exists(self):
         planner = AStarPlanner(rows=3, cols=3)
         obstacles = {(0, 1), (1, 0), (1, 2), (2, 1)}

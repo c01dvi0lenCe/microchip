@@ -39,8 +39,10 @@ class UiControllerMixin:
         self.main_notebook = ttk.Notebook(left_panel)
         manual_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         auto_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
+        scope_test_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         self.main_notebook.add(manual_page, text="手动电极")
         self.main_notebook.add(auto_page, text="自动化路径规划")
+        self.main_notebook.add(scope_test_page, text="第一章硬件测试")
 
         self.manual_matrix_card, self.manual_canvas = self._build_matrix_card(
             manual_page,
@@ -58,6 +60,8 @@ class UiControllerMixin:
             manual=False,
         )
         self.path_matrix_card.pack(fill="both", expand=True)
+
+        self._build_scope_validation_page(scope_test_page)
 
         self.matrix_canvases = [self.manual_canvas, self.path_canvas]
         self.matrix_canvas = self.manual_canvas

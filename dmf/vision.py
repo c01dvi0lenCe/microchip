@@ -301,10 +301,10 @@ class SimulatedCamera:
         row, col = cell
         cell_size = self.cell_size_px
         if 0 <= row < self.rows and 0 <= col < self.cols:
-            x0 = int(round(left + col * cell_size)) + 1
-            y0 = int(round(top + row * cell_size)) + 1
-            x1 = int(round(left + (col + 1) * cell_size)) - 1
-            y1 = int(round(top + (row + 1) * cell_size)) - 1
+            x0 = int(round(left + col * cell_size))
+            y0 = int(round(top + row * cell_size))
+            x1 = int(round(left + (col + 1) * cell_size))
+            y1 = int(round(top + (row + 1) * cell_size))
             return x0, y0, x1, y1
         if cell not in RESERVOIR_CELLS:
             return None

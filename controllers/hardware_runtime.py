@@ -19,6 +19,7 @@ class HardwareRuntimeMixin:
             self.btn_connect.config(state="normal")
             self._set_connection_state(self.is_connected, self.port_combobox.get())
             self.auto_status_label.config(text="闭环: 实物待机（相机适配器未配置）", fg=self.colors["muted"])
+        self._update_scope_controls_state()
 
     def _set_connection_state(self, connected, port_name=""):
         self.is_connected = connected
@@ -31,6 +32,8 @@ class HardwareRuntimeMixin:
         else:
             self.btn_connect.config(text="打开串口", bg=self.colors["accent"], activebackground=self.colors["accent_hover"])
             self.connection_badge.config(text="● 未连接", fg="#A33F3F")
+        if hasattr(self, "btn_scope_start"):
+            self._update_scope_controls_state()
 
     def _set_active_count(self, count):
         self.active_channels = count
@@ -75,14 +78,18 @@ class HardwareRuntimeMixin:
                     return
                 self.hardware_state_uncertain = False
                 self.hardware_auto_owned = False
+                self.scope_test_running = False
                 self._clear_local_electrode_display()
                 self.log(f"成功连接到 {port}，STM32 已确认 ALL_OFF，会话序列已同步")
             except Exception as exc:
                 messagebox.showerror("错误", str(exc))
         else:
+            if self.scope_test_running and not self.stop_scope_test():
+                self.log("测试停止未确认，仍将断开串口；请断电检查输出")
             if self.ser:
                 self.ser.close()
             self._set_connection_state(False)
+            self._update_scope_controls_state()
             self.log("串口已断开")
 
     def send_command(self, command, log_send=True):
@@ -110,9 +117,18 @@ class HardwareRuntimeMixin:
     def _send_transaction_line(self, command):
         return self.send_command(command, log_send=False)
 
+    def _send_scope_test_line(self, command):
+        sent = self.send_command(command, log_send=False)
+        if sent:
+            self.log(f"测试命令 -> {command}")
+        return sent
+
     def _submit_auto_electrode_changes(self, changes):
         if self.is_simulation_mode() or not changes:
             return True
+        if self.scope_test_running:
+            self.log("示波器测试正在独占ROW/COL，自动电极命令已阻止")
+            return False
         result = self.electrode_transactions.apply_changes(changes)
         if result.applied:
             self.hardware_auto_owned = True
@@ -148,8 +164,6 @@ class HardwareRuntimeMixin:
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
             return
-        if self._hardware_manual_control_blocked():
-            return
         current_state = self.buttons[eid]["state"]
         new_state = 1 if current_state == 0 else 0
         self._set_electrode_state(eid, new_state)
@@ -160,30 +174,25 @@ class HardwareRuntimeMixin:
     def _set_electrode_state(self, eid, state, log_send=True):
         if eid not in self.buttons:
             return
-        if self._hardware_manual_control_blocked():
-            return
         state = 1 if state else 0
         if self.buttons[eid]["state"] == state:
             return
-        self.update_ui_only(eid, state)
-        self.send_command(HardwareProtocol.set_electrode(eid, state), log_send=log_send)
+        self._apply_manual_electrode_changes({eid: state}, log_send=log_send)
 
     def manual_toggle_electrode(self, cell, additive=False):
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
-            return
-        if self._hardware_manual_control_blocked():
             return
         eid = electrode_id(cell[0], cell[1], self.cols)
         active_ids = self._active_electrode_ids()
         current_state = self.buttons[eid]["state"]
 
         if additive:
-            self._set_electrode_state(eid, 0 if current_state else 1)
+            self._apply_manual_electrode_changes({eid: 0 if current_state else 1})
             return
 
         if current_state:
-            self._set_electrode_state(eid, 0)
+            self._apply_manual_electrode_changes({eid: 0})
             return
 
         active_neighbor_ids = {
@@ -191,15 +200,53 @@ class HardwareRuntimeMixin:
             for active_id in active_ids
             if cell_from_electrode_id(active_id, self.cols) in self._manual_neighbor_cells(cell)
         }
-        for active_id in sorted(active_neighbor_ids):
-            self._set_electrode_state(active_id, 0)
-        self._set_electrode_state(eid, 1)
+        changes = {active_id: 0 for active_id in active_neighbor_ids}
+        changes[eid] = 1
+        self._apply_manual_electrode_changes(changes)
+
+    def _apply_manual_electrode_changes(self, changes, log_send=True):
+        effective_changes = {
+            int(eid): 1 if state else 0
+            for eid, state in changes.items()
+            if eid in self.buttons and self.buttons[eid]["state"] != (1 if state else 0)
+        }
+        if not effective_changes:
+            return True
+        if self._hardware_manual_control_blocked():
+            return False
+
+        if not self.is_simulation_mode():
+            if not self.is_connected:
+                if log_send:
+                    self.log("串口未连接，手动电极未发送")
+                return False
+
+            result = self.electrode_transactions.apply_changes(effective_changes)
+            if not result.applied:
+                self.hardware_state_uncertain = True
+                self.auto_status_label.config(text="闭环: 手动通信失败，硬件状态未知", fg=self.colors["danger"])
+                self.log(f"手动事务 {result.sequence} 未确认生效：{result.error}，禁止继续手动操作")
+                return False
+
+            for changed_id, changed_state in sorted(effective_changes.items()):
+                self.update_ui_only(changed_id, changed_state)
+            if log_send:
+                self.log(f"手动事务 {result.sequence} 已生效，变化 {len(effective_changes)} 个电极")
+            return True
+
+        for changed_id, changed_state in sorted(effective_changes.items()):
+            self.update_ui_only(changed_id, changed_state)
+            self.send_command(HardwareProtocol.set_electrode(changed_id, changed_state), log_send=log_send)
+        return True
 
     def _hardware_manual_control_blocked(self):
         if self.is_simulation_mode():
             return False
         if self.hardware_state_uncertain:
             self.log("硬件状态未知，禁止手动操作；请重新连接并确认 ALL_OFF")
+            return True
+        if self.scope_test_running:
+            self.log("示波器测试正在独占ROW/COL；请先停止测试")
             return True
         if self.hardware_auto_owned:
             self.log("PC 自动控制仍占有电极；请先全部关闭以释放手动控制")
@@ -240,8 +287,12 @@ class HardwareRuntimeMixin:
                 return
             self.hardware_state_uncertain = False
             self.hardware_auto_owned = False
+            self.scope_test_running = False
 
         self._clear_local_electrode_display()
+        if hasattr(self, "scope_status_label") and not self.scope_test_running:
+            self.scope_status_label.config(text="测试: 已停止并全关", fg=self.colors["muted"])
+            self._update_scope_controls_state()
 
         if self.is_simulation_mode():
             self.log("仿真后端 -> 全部电极关闭")
@@ -270,7 +321,10 @@ class HardwareRuntimeMixin:
                     if self.ser.in_waiting:
                         line = self.ser.readline().decode("utf-8", errors="ignore").strip()
                         if line:
-                            if self.electrode_transactions.feed_line(line):
+                            if self.scope_test_client.feed_line(line):
+                                if line.startswith("ERR:CH1:"):
+                                    self.root.after(0, self.log, f"STM32测试错误 <- {line}")
+                            elif self.electrode_transactions.feed_line(line):
                                 if line.startswith("ERR:"):
                                     self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
                             elif line.startswith("SYNC:"):
@@ -306,6 +360,8 @@ class HardwareRuntimeMixin:
         self.log(f"修正反馈[{action}] {msg}")
 
     def on_close(self):
+        if self.scope_test_running and self.is_connected:
+            self.stop_scope_test()
         self.stop_event.set()
         self.auto_running = False
         self.camera_running = False

@@ -114,9 +114,19 @@ class ElectrodeTransactionClient:
 
             sent_all = True
             for electrode_id, state in sorted(changes.items()):
+                set_cursor = self._message_cursor()
                 if not self._send_line(f"SET:{electrode_id}:{state}"):
                     sent_all = False
                     last_error = f"SET:{electrode_id} send failed"
+                    break
+                set_reply = self._wait_for(
+                    set_cursor,
+                    lambda line, expected_id=electrode_id: line == f"ACK:{sequence}:SET:{expected_id}"
+                    or line.startswith("ERR:"),
+                )
+                if set_reply != f"ACK:{sequence}:SET:{electrode_id}":
+                    sent_all = False
+                    last_error = set_reply or f"SET:{electrode_id} acknowledgement timeout"
                     break
             if not sent_all:
                 continue

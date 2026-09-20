@@ -45,13 +45,24 @@ class CameraControllerMixin:
 
     def _show_camera_frame(self, frame_rgb):
         image = Image.fromarray(frame_rgb)
-        label_w = self.camera_label.winfo_width()
-        label_h = self.camera_label.winfo_height()
-        target_w = min(label_w if label_w > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
-        target_h = min(label_h if label_h > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        target_w, target_h = self._camera_preview_target_size()
         image.thumbnail((target_w, target_h), RESAMPLE_FILTER)
         photo = ImageTk.PhotoImage(image=image)
         self._update_camera_label(photo)
+
+    def _camera_preview_target_size(self):
+        label_w = self.camera_label.winfo_width()
+        label_h = self.camera_label.winfo_height()
+        if label_w <= 8 or label_h <= 8:
+            # The first frame is requested during application construction.
+            # Resolve Tk geometry first so that frame and later redraws use the
+            # same dimensions instead of jumping from 520 px to the laid-out size.
+            self.root.update_idletasks()
+            label_w = self.camera_label.winfo_width()
+            label_h = self.camera_label.winfo_height()
+        target_w = min(label_w if label_w > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        target_h = min(label_h if label_h > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        return target_w, target_h
 
     def toggle_camera(self):
         if self.camera_running:
@@ -106,11 +117,8 @@ class CameraControllerMixin:
         self.camera_after_id = self.root.after(120, self._camera_preview_loop)
 
     def _update_camera_from_image(self, image):
-        label_w = self.camera_label.winfo_width()
-        label_h = self.camera_label.winfo_height()
         image = image.copy()
-        target_w = min(label_w if label_w > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
-        target_h = min(label_h if label_h > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        target_w, target_h = self._camera_preview_target_size()
         image.thumbnail((target_w, target_h), RESAMPLE_FILTER)
         photo = ImageTk.PhotoImage(image=image)
         self._update_camera_label(photo)

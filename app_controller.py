@@ -27,6 +27,8 @@ from controllers.camera_controller import CameraControllerMixin
 from controllers.arrival_confirmation import ArrivalConfirmationGate
 from controllers.electrode_transaction import ElectrodeTransactionClient
 from controllers.task_control import TaskControlMixin
+from controllers.scope_test_client import H4_PHASES, SCAN_TEST_FREQUENCIES_HZ, ScopeTestClient
+from controllers.scope_validation_controller import ScopeValidationControllerMixin
 
 
 class STM32MatrixController(
@@ -40,6 +42,7 @@ class STM32MatrixController(
     MultiRuntimeMixin,
     ClosedLoopControllerMixin,
     CameraControllerMixin,
+    ScopeValidationControllerMixin,
 ):
     PRESET_SCHEMA = "dmf_visual_platform_settings"
     PRESET_VERSION = 1
@@ -89,6 +92,8 @@ class STM32MatrixController(
             ack_timeout_s=0.45,
             max_retries=2,
         )
+        self.scope_test_client = ScopeTestClient(self._send_scope_test_line)
+        self.scope_test_running = False
 
         self.camera_running = False
         self.hardware_camera_adapter = None
@@ -100,6 +105,13 @@ class STM32MatrixController(
         self.operation_var = tk.StringVar(value=self.OP_MOVE)
         self.tool_var = tk.StringVar(value=self.TOOL_MOVE_START)
         self.manual_tool_var = tk.StringVar(value=self.MANUAL_TOOL_TOGGLE)
+        self.scope_test_mode_var = tk.StringVar(value=self.SCOPE_MODE_OPTIONS[0])
+        self.scope_test_phase_var = tk.StringVar(value=H4_PHASES[0])
+        self.scope_test_row_var = tk.IntVar(value=1)
+        self.scope_test_col_var = tk.IntVar(value=1)
+        self.scope_test_row_b_var = tk.IntVar(value=1)
+        self.scope_test_col_b_var = tk.IntVar(value=2)
+        self.scope_test_frequency_var = tk.IntVar(value=SCAN_TEST_FREQUENCIES_HZ[-1])
         self.motion_profile_var = tk.StringVar(value="理想")
         self.vision_noise_var = tk.StringVar(value="关闭")
         self.fault_mode_var = tk.StringVar(value="无")
@@ -263,7 +275,7 @@ class STM32MatrixController(
         self._set_connection_state(False)
         self._set_active_count(0)
         self._update_mode_ui()
-        self._render_sim_camera_frame(force_display=False)
+        self.root.after(25, lambda: self._render_sim_camera_frame(force_display=True))
         self._schedule_manual_simulation_loop()
 
         self.recv_thread = threading.Thread(target=self.receive_data, daemon=True)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from tkinter import font as tkfont
+
 from .common import (
-    BOARD_FRAME_MM,
     CORNER_RESERVOIRS,
     LAYOUT_CELLS,
     MAX_CANVAS_PATH_ARROWS,
@@ -22,15 +23,18 @@ from .common import (
 
 class CanvasControllerMixin:
     def _grid_geometry(self):
-        width = max(1, self.matrix_canvas.winfo_width())
-        height = max(1, self.matrix_canvas.winfo_height())
         board_left, board_top, board_size = self._board_geometry()
-        px_per_mm = board_size / BOARD_FRAME_MM
-        cell_size = max(1, px_per_mm * self.pitch_mm)
+
+        # Reservoir pads reach about three core-cell pitches beyond the matrix.
+        # Scale that complete drawing to the canvas so core IDs stay legible.
+        outer_padding_cells = 2.2
+        drawing_cols = self.cols + 2 * outer_padding_cells
+        drawing_rows = self.rows + 2 * outer_padding_cells
+        cell_size = max(1, min(board_size / drawing_cols, board_size / drawing_rows))
         grid_w = cell_size * self.cols
         grid_h = cell_size * self.rows
-        left = board_left + (BOARD_FRAME_MM - self.cols * self.pitch_mm) * 0.5 * px_per_mm
-        top = board_top + (BOARD_FRAME_MM - self.rows * self.pitch_mm) * 0.5 * px_per_mm
+        left = board_left + (board_size - grid_w) / 2
+        top = board_top + (board_size - grid_h) / 2
         return left, top, grid_w, grid_h, cell_size
 
     def _board_geometry(self):
@@ -99,7 +103,8 @@ class CanvasControllerMixin:
         left, top, _, _, cell_size = self._grid_geometry()
         row, col = cell
         side = self._reservoir_side(cell)
-        pad_size = cell_size * (2.05 if cell in SIDE_RESERVOIR_LARGE else 0.85)
+        small_pad_size = cell_size * 0.85
+        pad_size = cell_size * (1.15 if cell in SIDE_RESERVOIR_LARGE else 0.85)
         if cell in CORNER_RESERVOIRS:
             rects = self._corner_reservoir_rects(cell)
             return (
@@ -108,40 +113,20 @@ class CanvasControllerMixin:
                 max(rect[2] for rect in rects),
                 max(rect[3] for rect in rects),
             )
+        half = pad_size / 2
+        offset = half + (small_pad_size if cell in SIDE_RESERVOIR_LARGE else 0)
         if side == "top":
             cx = left + (col + 0.5) * cell_size
-            cy = top + (row + 0.5) * cell_size
+            cy = top - offset
         elif side == "bottom":
             cx = left + (col + 0.5) * cell_size
-            cy = top + (row + 0.5) * cell_size
+            cy = top + self.rows * cell_size + offset
         elif side == "left":
-            cx = left + (col + 0.5) * cell_size
+            cx = left - offset
             cy = top + (row + 0.5) * cell_size
-        elif side == "right":
-            cx = left + (col + 0.5) * cell_size
-            cy = top + (row + 0.5) * cell_size
-        elif side == "top_left":
-            cx = left - 1.05 * cell_size
-            cy = top - 1.05 * cell_size
-        elif side == "top_right":
-            cx = left + (self.cols + 1.05) * cell_size
-            cy = top - 1.05 * cell_size
-        elif side == "bottom_left":
-            cx = left - 1.05 * cell_size
-            cy = top + (self.rows + 1.05) * cell_size
         else:
-            cx = left + (self.cols + 1.05) * cell_size
-            cy = top + (self.rows + 1.05) * cell_size
-        if cell in SIDE_RESERVOIR_LARGE:
-            if side == "top":
-                cy = top - 2.0 * cell_size
-            elif side == "bottom":
-                cy = top + (self.rows + 2.0) * cell_size
-            elif side == "left":
-                cx = left - 2.0 * cell_size
-            elif side == "right":
-                cx = left + (self.cols + 2.0) * cell_size
-        half = pad_size / 2
+            cx = left + self.cols * cell_size + offset
+            cy = top + (row + 0.5) * cell_size
         return cx - half, cy - half, cx + half, cy + half
 
     def _corner_reservoir_rects(self, cell):
@@ -331,6 +316,7 @@ class CanvasControllerMixin:
             self._draw_cell(cell, fill=self.colors["btn_on"], outline="")
         operation = self.operation_var.get()
         if manual_view:
+            self._draw_manual_electrode_ids()
             for idx, droplet in enumerate(self.manual_droplets, start=1):
                 color = self.multi_droplet_colors[(idx - 1) % len(self.multi_droplet_colors)]
                 self._draw_position_marker(droplet.position, color, radius_scale=0.34)
@@ -392,7 +378,7 @@ class CanvasControllerMixin:
             self._draw_reservoir_pad(cell, fill, outline, width)
             return
         x0, y0, x1, y1 = self._cell_rect(cell)
-        self.matrix_canvas.create_rectangle(x0 + 1, y0 + 1, x1 - 1, y1 - 1, fill=fill, outline=outline, width=width)
+        self.matrix_canvas.create_rectangle(x0, y0, x1, y1, fill=fill, outline=outline, width=width)
 
     def _path_arrow_cells(self, path):
         cells = [cell for cell in path if cell in LAYOUT_CELLS]
@@ -509,29 +495,88 @@ class CanvasControllerMixin:
         self.matrix_canvas.create_text(cx, cy, text=text, fill=fill, font=(self.font_family, 8, "bold"))
 
     def _draw_cell_text(self, cell, text, fill="#1F2A33"):
-        x0, y0, x1, y1 = self._cell_rect(cell)
-        size = max(7, int(min(x1 - x0, y1 - y0) * 0.26))
+        x0, y0, x1, y1 = self._cell_text_rect(cell)
+        box_width = x1 - x0
+        box_height = y1 - y0
+        text = str(text)
+        font_family = "Arial Narrow" if is_reservoir_cell(cell) else self.mono_font
+        cache = getattr(self, "_cell_text_font_cache", None)
+        if cache is None:
+            cache = {}
+            self._cell_text_font_cache = cache
+
+        cache_key = (font_family, len(text), round(box_width, 1), round(box_height, 1))
+        cell_font = cache.get(cache_key)
+        if cell_font is None:
+            size = max(6, int(box_height * 0.42))
+            cell_font = tkfont.Font(
+                root=self.root,
+                family=font_family,
+                size=size,
+                weight="bold",
+            )
+            max_text_width = max(1, box_width - 2)
+            max_text_height = max(1, box_height - 2)
+            while size > 6 and (
+                cell_font.measure(text) > max_text_width
+                or cell_font.metrics("linespace") > max_text_height
+            ):
+                size -= 1
+                cell_font.configure(size=size)
+            cache[cache_key] = cell_font
+
         self.matrix_canvas.create_text(
             (x0 + x1) / 2,
             (y0 + y1) / 2,
             text=text,
             fill=fill,
-            font=(self.font_family, size, "bold"),
+            font=cell_font,
         )
+
+    def _cell_text_rect(self, cell):
+        if cell not in CORNER_RESERVOIRS:
+            return self._cell_rect(cell)
+
+        left, top, grid_w, grid_h, cell_size = self._grid_geometry()
+        right = left + grid_w
+        bottom = top + grid_h
+        side = self._reservoir_side(cell)
+        if side == "top_left":
+            return left - cell_size, top - cell_size, left, top
+        if side == "top_right":
+            return right, top - cell_size, right + cell_size, top
+        if side == "bottom_left":
+            return left - cell_size, bottom, left, bottom + cell_size
+        return right, bottom, right + cell_size, bottom + cell_size
+
+    def _draw_manual_electrode_ids(self):
+        for eid in sorted(self.buttons):
+            try:
+                cell = cell_from_electrode_id(eid, self.cols, self.rows)
+            except ValueError:
+                continue
+            if is_reservoir_cell(cell):
+                fill = "white"
+            else:
+                fill = "white" if self.buttons[eid]["state"] == 1 else self.colors["muted"]
+            self._draw_cell_text(cell, str(eid), fill=fill)
 
     def on_matrix_click(self, event, manual=False):
         self.matrix_canvas = event.widget
         cell = self._canvas_to_cell(event.x, event.y)
         if cell is None:
             return
-        shift_pressed = bool(getattr(event, "state", 0) & 0x0001)
+        event_state = getattr(event, "state", 0)
+        shift_pressed = bool(event_state & 0x0001)
+        ctrl_pressed = bool(event_state & 0x0004)
+        additive_pressed = shift_pressed or ctrl_pressed
 
         if manual:
             if self.manual_tool_var.get() == self.MANUAL_TOOL_DROPLET:
                 self.set_manual_droplet(cell)
                 self._update_cell_status(cell)
                 return
-            self.manual_toggle_electrode(cell, additive=shift_pressed)
+            self.manual_toggle_electrode(cell, additive=additive_pressed)
             self.manual_last_update_time = time.monotonic()
             self._update_cell_status(cell)
             self._draw_matrix_canvas()
