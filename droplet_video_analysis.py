@@ -10,7 +10,8 @@ from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
-from dmf_simulation import ELECTRODE_PITCH_MM, GRID_COLS, GRID_ROWS, Cell, clamp_cell, electrode_id
+from dmf.vision import ArrayGridCalibration, Roi
+from dmf_simulation import ELECTRODE_PITCH_MM, Cell, electrode_id
 
 try:
     import cv2
@@ -19,35 +20,6 @@ except ImportError:  # pragma: no cover - only used on machines without OpenCV.
 
 
 Point = tuple[float, float]
-
-
-@dataclass(frozen=True)
-class Roi:
-    x: int
-    y: int
-    width: int
-    height: int
-
-    @classmethod
-    def from_sequence(cls, values: Sequence[float | int]) -> "Roi":
-        if len(values) != 4:
-            raise ValueError("ROI must be x,y,width,height")
-        x, y, width, height = (int(round(float(value))) for value in values)
-        if width <= 0 or height <= 0:
-            raise ValueError("ROI width and height must be positive")
-        return cls(x, y, width, height)
-
-    def clamp_to_frame(self, frame_shape: tuple[int, int, int] | tuple[int, int]) -> "Roi":
-        frame_h, frame_w = frame_shape[:2]
-        x0 = max(0, min(frame_w - 1, self.x))
-        y0 = max(0, min(frame_h - 1, self.y))
-        x1 = max(x0 + 1, min(frame_w, self.x + self.width))
-        y1 = max(y0 + 1, min(frame_h, self.y + self.height))
-        return Roi(x0, y0, x1 - x0, y1 - y0)
-
-    def crop(self, frame: np.ndarray) -> np.ndarray:
-        clipped = self.clamp_to_frame(frame.shape)
-        return frame[clipped.y : clipped.y + clipped.height, clipped.x : clipped.x + clipped.width]
 
 
 @dataclass(frozen=True)
@@ -136,45 +108,6 @@ class SpeedSegment:
 
     def to_csv_row(self) -> dict[str, object]:
         return asdict(self)
-
-
-@dataclass(frozen=True)
-class ArrayGridCalibration:
-    """Perspective mapping used later for real 20x20 camera feedback."""
-
-    corners_px: tuple[Point, Point, Point, Point]
-    rows: int = GRID_ROWS
-    cols: int = GRID_COLS
-
-    def __post_init__(self) -> None:
-        if cv2 is None:
-            raise RuntimeError("OpenCV is required for array grid calibration")
-        object.__setattr__(self, "_homography", self._build_homography())
-
-    def _build_homography(self) -> np.ndarray:
-        src = np.array(self.corners_px, dtype=np.float32)
-        dst = np.array(
-            [[0.0, 0.0], [float(self.cols), 0.0], [float(self.cols), float(self.rows)], [0.0, float(self.rows)]],
-            dtype=np.float32,
-        )
-        homography = cv2.getPerspectiveTransform(src, dst)
-        if homography is None:
-            raise ValueError("Could not build perspective transform from corners")
-        return homography
-
-    def pixel_to_grid_position(self, point: Point) -> tuple[float, float]:
-        src = np.array([[[point[0], point[1]]]], dtype=np.float32)
-        mapped = cv2.perspectiveTransform(src, self._homography)[0][0]
-        col = float(mapped[0])
-        row = float(mapped[1])
-        return row, col
-
-    def pixel_to_cell(self, point: Point) -> Cell:
-        row, col = self.pixel_to_grid_position(point)
-        return clamp_cell((int(math.floor(row)), int(math.floor(col))), self.rows, self.cols)
-
-    def to_json_dict(self) -> dict[str, object]:
-        return {"corners_px": self.corners_px, "rows": self.rows, "cols": self.cols}
 
 
 @dataclass(frozen=True)

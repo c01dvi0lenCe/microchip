@@ -8,7 +8,7 @@ import numpy as np
 
 from simulation.profiles import VisionNoiseProfile
 
-from .layout import (
+from ..layout import (
     CAMERA_LAYOUT_PADDING_CELLS,
     CORNER_RESERVOIRS,
     Cell,
@@ -21,7 +21,7 @@ from .layout import (
     SIDE_RESERVOIR_LARGE,
     rounded_cell,
 )
-from .models import Detection
+from ..models import Detection
 
 try:
     import cv2

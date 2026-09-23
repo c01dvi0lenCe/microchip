@@ -39,7 +39,7 @@ python main.py
 - `dmf/layout.py`：阵列拓扑、电极编号、储液池与废液池定义。
 - `dmf/planning/`：A*、液滴分配和多液滴冲突安全调度。
 - `dmf/motion.py`：液滴运动模型。
-- `dmf/vision.py`：仿真相机与液滴检测。
+- `dmf/vision/`：仿真视觉兼容层及独立离线视觉实验框架。
 - `controllers/`：STM32 串口命令适配。
 - `simulation/`：仿真参数和实验指标。
 - `validation/closed_loop_chain/`：独立的软件链路验证器，不进入 GUI。
@@ -60,6 +60,19 @@ python -m validation.closed_loop_chain.run_validation
 - `validation/closed_loop_chain/output/closed_loop_chain_summary.md`
 
 软件 PASS 不等于实物 PASS。Keil 编译/烧录、示波器、逻辑分析仪、相机标定和真实液滴实验仍需在硬件到位后完成。
+
+## 离线视觉实验
+
+第一阶段统一框架支持阈值分割和显式空白背景差分，输出同构的Mask、质心、覆盖率、距离、基于时间戳的速度及评测数据。它不改变现有GUI闭环流程，也不预设U-Net或五状态阈值。
+
+```powershell
+python -m dmf.vision extract-frames --video input.mp4 --video-id pilot01 --output-dir data/frames/pilot01
+python -m dmf.vision validate-dataset --manifest data/splits/manifest.csv --annotations data/annotations/pilot.csv
+python -m dmf.vision run-baseline --config configs/experiment.yaml
+python -m dmf.vision evaluate --results results/pilot/frame_results.csv --ground-truth data/annotations/pilot.csv --output-dir results/pilot/evaluation
+```
+
+配置和数据格式见 `docs/vision-experiment-framework.md`。原始视频、帧、Mask和运行结果默认不提交Git。
 
 ## 在另一台电脑同步
 

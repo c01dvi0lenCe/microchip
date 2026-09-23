@@ -1,0 +1,12 @@
+rows: 20
+cols: 20
+pitch_mm: 3.2
+# Example-only core corners ordered TL, TR, BR, BL. Replace with E0 calibration.
+core_corners_px:
+  - [100, 100]
+  - [740, 100]
+  - [740, 740]
+  - [100, 740]
+# IDs 1-400 are generated from the homography. IDs 401-420 use the existing
+# peripheral/L-shape template unless a measured polygon is supplied here.
+pixel_overrides: {}

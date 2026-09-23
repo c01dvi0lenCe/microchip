@@ -1,0 +1,9 @@
+camera_model: MV-CS200-10UC-V5
+lens_model: MVL-KF2524M-25MP
+connection: usb3_sdk
+mode: offline_video
+# Fill these after E0 imaging setup is fixed. They are metadata in phase 1.
+roi: null
+exposure_us: null
+gain_db: null
+hardware_timestamp: false

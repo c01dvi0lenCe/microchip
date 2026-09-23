@@ -1,0 +1,2 @@
+video_id,batch_id,frame_id,timestamp_s,mask_path,source_electrode,target_electrode,state_gt
+synthetic_v1,synthetic_batch,0,0.0,mask_000.png,1,2,Partial

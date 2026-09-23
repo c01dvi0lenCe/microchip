@@ -1,0 +1,32 @@
+run_id: pilot-threshold-example
+video:
+  video_id: pilot_e10_10_to_e10_11
+  batch_id: pilot_batch_01
+  split: test
+  path: ../data/raw_videos/pilot.mp4
+  start_frame: 0
+  max_frames: null
+electrode_map: electrode_map.yaml
+output_dir: ../results/pilot-threshold
+ground_truth_csv: ../data/annotations/pilot_annotations.csv
+source_electrode: 190
+target_electrode: 191
+algorithm:
+  name: threshold
+  parameters:
+    color_space: hsv
+    lower: [0, 0, 0]
+    upper: [180, 255, 120]
+    min_area_px: 40
+    max_area_px: null
+    morphology_kernel: 3
+    open_iterations: 1
+    close_iterations: 2
+constraints:
+  spatial:
+    enabled: false
+  temporal:
+    enabled: false
+    # Required only when enabled; determine tolerance from pilot data.
+    max_speed_mm_s: null
+    tolerance_mm: null

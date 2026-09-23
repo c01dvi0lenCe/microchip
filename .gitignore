@@ -6,3 +6,9 @@ video_outputs/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+data/raw_videos/
+data/frames/
+data/masks/
+data/annotations/
+data/splits/
+results/
