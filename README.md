@@ -105,3 +105,16 @@ git pull --ff-only
 ```
 
 另一台电脑的 Codex 应先阅读两个仓库各自的 `AGENTS.md`。上位机还需阅读 `CONTEXT.md` 和 `docs/implementation-status.md`；固件还需阅读 `README.md` 与协议设计文档。两边都明确规定：LCD 只做手动测试，所有自动任务均由 PC 上位机执行。
+
+## 第二章单液滴实验入口
+
+`run_experiment.py` 提供独立 `offline / dry_run / experiment` 模式，默认不发送 AM 命令。
+配置、U-Net 导出模型接口、相机 SDK 接口、五状态规则、四动作逻辑与日志说明见
+[第二章实验模式](docs/chapter2-experiment.md)。本入口不改变原 GUI 的多液滴和重规划行为。
+
+```powershell
+python scripts/create_chapter2_demo.py --output results/chapter2-demo
+python run_experiment.py --config results/chapter2-demo/transport.yaml
+```
+
+该示例仅验证软件链路，不代表真实 U-Net 或实物闭环已通过验证。

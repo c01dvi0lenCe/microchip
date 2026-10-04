@@ -32,6 +32,16 @@ Never mix commits or files between these workspaces.
 
 ## Key modules
 
+### Chapter 2 experiment mode
+
+`run_experiment.py` / `dmf/experiment/` is a separate single-droplet mode specified
+by the user on 2026-10-04. It intentionally uses bounded Retry and local source
+Recovery instead of the legacy GUI's 8+4-second global replan policy. Do not add
+A*, multi-droplet scheduling, or automatic failed-electrode rerouting here.
+Read `docs/chapter2-experiment.md` before changing it. Never enable real serial
+output in offline/dry_run. State thresholds remain centralized in YAML.
+The existing GUI contract above continues to apply to the old controller.
+
 - `app_controller.py`: composition root and shared state.
 - `controllers/electrode_transaction.py`: serial atomic transaction client.
 - `controllers/arrival_confirmation.py`: stable vision gate.

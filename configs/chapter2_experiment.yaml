@@ -1,0 +1,62 @@
+# All threshold values are INITIAL PLACEHOLDERS, not experimentally calibrated.
+experiment_id: chapter2-pilot-001
+mode: offline
+enable_am_output: false
+calibration_confirmed: false
+synthetic_test_only: false
+electrode_map: electrode_map.yaml
+route: [190, 191, 192]
+# Empty means the current source/target polygons. Add measured local neighbors if needed.
+candidate_electrodes: []
+output_dir: ../results/chapter2-pilot-001
+emergency_stop_file: ../STOP_EXPERIMENT
+source:
+  video: ../data/raw_videos/pilot.mp4
+  backend: opencv
+  device: 0
+  frame_timeout_s: 2.0
+  # For vendor SDK: backend: plugin; factory: your_camera_adapter:open_camera
+  # parameters: {serial_number: YOUR_CAMERA_SERIAL}
+segmentation:
+  name: unet
+  backend: onnx
+  model_path: ../models/unet.onnx
+  input_size: [256, 256]   # height, width; must match the trained export
+  mean: [0.0, 0.0, 0.0]  # RGB / 255 normalization; set to training values
+  std: [1.0, 1.0, 1.0]
+  output: logits          # probabilities if the model already applies sigmoid
+  threshold: 0.5
+state:
+  v_th_mm_s: 0.2
+  eta_enter: 0.15
+  eta_arr: 0.75
+  eta_release: 0.10
+  position_tolerance_mm: 0.5
+  max_speed_mm_s: 20.0
+  prediction_tolerance_mm: 2.0
+  history_max_gap_s: 1.0
+  consistency_frames: 2
+  arrival_frames: 5
+  arrival_duration_s: 0.25
+  min_area_px: 10.0
+  max_area_px: 100000.0
+  min_confidence: 0.2
+control:
+  wait_s: 8.0
+  max_retries: 2
+  recovery_timeout_s: 8.0
+  max_recoveries: 2
+  no_detection_timeout_s: 2.0
+  source_timeout_s: 10.0
+  source_frames: 5
+  source_duration_s: 0.25
+serial:
+  port: null
+  baudrate: 115200
+  ack_timeout_s: 0.35
+  command_timeout_s: 5.0
+  max_retries: 2           # communication retries, distinct from liquid-motion retries
+recording:
+  raw: false
+  mask: true
+  overlay: true
