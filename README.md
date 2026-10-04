@@ -108,9 +108,20 @@ git pull --ff-only
 
 ## 第二章单液滴实验入口
 
-`run_experiment.py` 提供独立 `offline / dry_run / experiment` 模式，默认不发送 AM 命令。
+统一从 `python main.py` 启动，打开 **第二章单液滴实验** 页。
+
+1. 首次使用可点击 **运行离线合成示例（无需硬件）**，观察右侧画面及状态/动作。
+2. 正式运行先复制并填写 `configs/chapter2_experiment.yaml`，点击 **选择配置**。
+3. 选择 `offline`（视频）、`dry_run`（相机试运行）或 `experiment`（相机及 AM 输出）。
+4. 点击 **开始实验**；需要结束时点击 **停止并释放输出**。
+5. 完成后点击 **打开结果目录** 查看 CSV、配置副本和可选图像。每次生成独立运行目录。
+
+实验使用配置中的串口；先关闭手动页的串口连接。实验期间其他控制入口锁定。
+原“第一章硬件测试”页及专属控制代码已删除，手动电极和原有仿真保留。
+
+`run_experiment.py` 保留同一实验引擎的命令行入口，默认不发送 AM 命令。
 配置、U-Net 导出模型接口、相机 SDK 接口、五状态规则、四动作逻辑与日志说明见
-[第二章实验模式](docs/chapter2-experiment.md)。本入口不改变原 GUI 的多液滴和重规划行为。
+[第二章实验模式](docs/chapter2-experiment.md)。原有多液滴仿真和第二章单液滴策略分别运行。
 
 ```powershell
 python scripts/create_chapter2_demo.py --output results/chapter2-demo

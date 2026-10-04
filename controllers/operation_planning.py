@@ -15,6 +15,7 @@ from .common import (
     schedule_multi_paths,
     tk,
 )
+from .planning_job import MultiPlanRequest
 
 
 class OperationPlanningMixin:
@@ -308,35 +309,103 @@ class OperationPlanningMixin:
         return self._plan_move_path()
 
     def _plan_multi_paths(self):
+        request = self._capture_multi_plan_request()
+        if request is None:
+            return []
+        return self._apply_multi_plan(self._compute_multi_plan_request(request))
+
+    def request_plan_path(self, reset_droplet=False, on_complete=None):
+        if self.operation_var.get() != self.OP_MULTI:
+            planned = self.plan_path(reset_droplet=reset_droplet)
+            if on_complete is not None and self._operation_ready_to_start(planned):
+                on_complete(planned)
+            return bool(planned)
+        if self.planning_jobs.is_active:
+            self.log("多液滴规划正在进行，请等待当前规划完成")
+            return False
+        self.last_plan_error = ""
+        if reset_droplet:
+            self._reset_droplets_for_operation()
+        request = self._capture_multi_plan_request()
+        if request is None:
+            return False
+        self.btn_plan.config(state="disabled")
+        self.auto_status_label.config(text="闭环: 正在规划多液滴路径", fg=self.colors["accent"])
+        accepted = self.planning_jobs.submit(
+            work=lambda: self._compute_multi_plan_request(request),
+            on_success=lambda assignments: self._complete_multi_plan_request(request, assignments, on_complete),
+            on_error=self._handle_multi_plan_exception,
+        )
+        if not accepted:
+            self._restore_multi_plan_controls()
+        return accepted
+
+    def _capture_multi_plan_request(self, report_errors=True):
         multi_sources = self._multi_source_cells()
         if not multi_sources:
-            return self._handle_plan_failed("多液滴规划失败：请先设置储液池或阵列初始液滴")
+            if report_errors:
+                self._handle_plan_failed("多液滴规划失败：请先设置储液池或阵列初始液滴")
+            return None
         if not self.target_shape_cells:
-            return self._handle_plan_failed("多液滴规划失败：请先在中间阵列设置目标电极")
+            if report_errors:
+                self._handle_plan_failed("多液滴规划失败：请先在中间阵列设置目标电极")
+            return None
         if (
             not self.loaded_reservoirs
             and self.initial_droplet_cells
             and len(self.target_shape_cells) != len(self.initial_droplet_cells)
         ):
-            return self._handle_plan_failed(
-                "多液滴规划失败：未设置储液池时，目标电极数量必须等于初始液滴数量；"
-                f"当前初始液滴 {len(self.initial_droplet_cells)} 滴，目标 {len(self.target_shape_cells)} 个"
-            )
+            if report_errors:
+                self._handle_plan_failed(
+                    "多液滴规划失败：未设置储液池时，目标电极数量必须等于初始液滴数量；"
+                    f"当前初始液滴 {len(self.initial_droplet_cells)} 滴，目标 {len(self.target_shape_cells)} 个"
+                )
+            return None
         source_capacity = self._multi_source_capacities()
         total_capacity = sum(source_capacity.values())
         if total_capacity < len(self.target_shape_cells):
-            return self._handle_plan_failed(
-                "多液滴规划失败：目标电极数量超过可用液滴数；"
-                f"当前可用 {total_capacity} 滴，目标 {len(self.target_shape_cells)} 个"
-            )
-
-        assignments = build_multi_droplet_assignments(
-            multi_sources,
-            self.target_shape_cells,
-            self.planner,
-            self._routing_obstacles(*multi_sources, *self.target_shape_cells),
-            source_capacity=source_capacity,
+            if report_errors:
+                self._handle_plan_failed(
+                    "多液滴规划失败：目标电极数量超过可用液滴数；"
+                    f"当前可用 {total_capacity} 滴，目标 {len(self.target_shape_cells)} 个"
+                )
+            return None
+        return MultiPlanRequest(
+            sources=tuple(sorted(multi_sources)),
+            targets=tuple(self.target_shape_cells),
+            obstacles=frozenset(self._routing_obstacles(*multi_sources, *self.target_shape_cells)),
+            source_capacity=tuple(sorted(source_capacity.items())),
         )
+
+    def _compute_multi_plan_request(self, request):
+        return build_multi_droplet_assignments(
+            request.sources,
+            request.targets,
+            self.planner,
+            request.obstacles,
+            source_capacity=dict(request.source_capacity),
+        )
+
+    def _complete_multi_plan_request(self, request, assignments, on_complete):
+        try:
+            if request != self._capture_multi_plan_request(report_errors=False):
+                self.log("规划期间任务设置已改变，旧的多液滴规划结果已丢弃")
+                return
+            planned = self._apply_multi_plan(assignments)
+            if on_complete is not None and self._operation_ready_to_start(planned):
+                on_complete(planned)
+        finally:
+            self._restore_multi_plan_controls()
+
+    def _handle_multi_plan_exception(self, error):
+        self.log(f"多液滴规划异常：{error}")
+        self.auto_status_label.config(text="闭环: 多液滴规划失败", fg="#A33F3F")
+        self._restore_multi_plan_controls()
+
+    def _restore_multi_plan_controls(self):
+        self.btn_plan.config(state="normal")
+
+    def _apply_multi_plan(self, assignments):
         if not assignments:
             return self._handle_plan_failed("多液滴规划失败：目标电极存在无法避碰的路径")
 
@@ -372,6 +441,18 @@ class OperationPlanningMixin:
         self._draw_matrix_canvas()
         self._render_sim_camera_frame()
         return assignments
+
+    def _drain_planning_jobs(self):
+        return self.planning_jobs.drain()
+
+    def _schedule_planning_job_poll(self):
+        if self.planning_poll_after_id is None and not self.stop_event.is_set():
+            self.planning_poll_after_id = self.root.after(40, self._poll_planning_jobs)
+
+    def _poll_planning_jobs(self):
+        self.planning_poll_after_id = None
+        self._drain_planning_jobs()
+        self._schedule_planning_job_poll()
 
     def _multi_source_cells(self):
         return (set(self.loaded_reservoirs) - set(CORNER_RESERVOIRS)) | set(self.initial_droplet_cells)

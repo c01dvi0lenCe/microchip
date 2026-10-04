@@ -34,13 +34,18 @@ Never mix commits or files between these workspaces.
 
 ### Chapter 2 experiment mode
 
-`run_experiment.py` / `dmf/experiment/` is a separate single-droplet mode specified
+`main.py` (chapter 2 tab) / `run_experiment.py` / `dmf/experiment/` is a single-droplet mode specified
 by the user on 2026-10-04. It intentionally uses bounded Retry and local source
 Recovery instead of the legacy GUI's 8+4-second global replan policy. Do not add
 A*, multi-droplet scheduling, or automatic failed-electrode rerouting here.
 Read `docs/chapter2-experiment.md` before changing it. Never enable real serial
 output in offline/dry_run. State thresholds remain centralized in YAML.
-The existing GUI contract above continues to apply to the old controller.
+The existing GUI contract above continues to apply to the legacy simulation controller.
+`controllers/experiment_controller.py` owns the experiment tab; `experiment_session.py`
+runs the engine off the Tk thread and passes the latest frame and final report back.
+Close/stop must allow AM release and log flush to finish. Never permit simultaneous
+manual/legacy and experiment serial or camera ownership. Chapter 1 scope-test controls
+were removed at the user's request; do not restore them when merging older branches.
 
 - `app_controller.py`: composition root and shared state.
 - `controllers/electrode_transaction.py`: serial atomic transaction client.

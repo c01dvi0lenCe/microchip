@@ -14,8 +14,17 @@ from .common import (
 
 
 class CameraControllerMixin:
+    def _camera_idle_text(self):
+        if self.is_simulation_mode():
+            return "仿真视觉预览未开启"
+        if getattr(self, "hardware_camera_adapter", None) is None:
+            return "工业相机适配器未配置（相机应通过 USB3/SDK 直连电脑）"
+        return "工业相机预览未开启"
+
     def _render_sim_camera_frame(self, hide_droplet=False, force_display=True):
-        if not hasattr(self, "camera_label"):
+        if self._experiment_active or self._experiment_page_selected():
+            return None
+        if not self.is_simulation_mode() or not hasattr(self, "camera_label"):
             return None
         context = self._camera_render_context()
         context["hide_droplet"] = hide_droplet or context["hide_droplet"]
@@ -50,19 +59,6 @@ class CameraControllerMixin:
         photo = ImageTk.PhotoImage(image=image)
         self._update_camera_label(photo)
 
-    def _camera_preview_target_size(self):
-        label_w = self.camera_label.winfo_width()
-        label_h = self.camera_label.winfo_height()
-        if label_w <= 8 or label_h <= 8:
-            # The first frame is requested during application construction.
-            # Resolve Tk geometry first so that frame and later redraws use the
-            # same dimensions instead of jumping from 520 px to the laid-out size.
-            self.root.update_idletasks()
-            label_w = self.camera_label.winfo_width()
-            label_h = self.camera_label.winfo_height()
-        target_w = min(label_w if label_w > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
-        target_h = min(label_h if label_h > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
-        return target_w, target_h
 
     def toggle_camera(self):
         if self.camera_running:
@@ -71,6 +67,8 @@ class CameraControllerMixin:
             self.start_camera()
 
     def start_camera(self):
+        if self._experiment_active or self._experiment_page_selected():
+            return
         if self.is_simulation_mode():
             self.camera_running = True
             self.btn_camera.config(text="关闭预览", bg=self.colors["danger"], activebackground=self.colors["danger_hover"])
@@ -106,7 +104,7 @@ class CameraControllerMixin:
             self.camera_thread.join(timeout=1)
             self.camera_thread = None
         self.btn_camera.config(text="开启预览", bg=self.colors["accent"], activebackground=self.colors["accent_hover"])
-        self.camera_label.config(image="", text="仿真视觉预览未开启", font=(self.font_family, 12), fg=self.colors["muted"])
+        self.camera_label.config(image="", text=self._camera_idle_text(), font=(self.font_family, 12), fg=self.colors["muted"])
         self.camera_label.image = None
         self.log("视觉预览已关闭")
 
@@ -123,6 +121,21 @@ class CameraControllerMixin:
         photo = ImageTk.PhotoImage(image=image)
         self._update_camera_label(photo)
 
+
     def _update_camera_label(self, photo):
         self.camera_label.config(image=photo, text="")
         self.camera_label.image = photo
+
+    def _camera_preview_target_size(self):
+        label_w = self.camera_label.winfo_width()
+        label_h = self.camera_label.winfo_height()
+        if label_w <= 8 or label_h <= 8:
+            # The first frame is requested during application construction.
+            # Resolve Tk geometry first so that frame and later redraws use the
+            # same dimensions instead of jumping from 520 px to the laid-out size.
+            self.root.update_idletasks()
+            label_w = self.camera_label.winfo_width()
+            label_h = self.camera_label.winfo_height()
+        target_w = min(label_w if label_w > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        target_h = min(label_h if label_h > 8 else CAMERA_PREVIEW_MAX_PX, CAMERA_PREVIEW_MAX_PX)
+        return target_w, target_h

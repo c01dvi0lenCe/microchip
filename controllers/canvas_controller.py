@@ -562,6 +562,8 @@ class CanvasControllerMixin:
             self._draw_cell_text(cell, str(eid), fill=fill)
 
     def on_matrix_click(self, event, manual=False):
+        if self._experiment_active:
+            return
         self.matrix_canvas = event.widget
         cell = self._canvas_to_cell(event.x, event.y)
         if cell is None:
@@ -589,7 +591,7 @@ class CanvasControllerMixin:
             self.log("闭环运行中，路径编辑已忽略")
             return
 
-        if tool == self.TOOL_OBSTACLE:
+        if tool in (self.TOOL_OBSTACLE, self.TOOL_HARDWARE_OBSTACLE):
             row, col = cell
             if is_reservoir_cell(cell) or not (0 <= row < self.rows and 0 <= col < self.cols):
                 self.log("设置障碍物时请点击中间 20x20 阵列")

@@ -25,8 +25,10 @@ class Confirmation:
         return self.count>=self.frames and t-self.start+1e-9>=self.duration
 
 
-def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory=None,actuator_factory=None):
+def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory=None,actuator_factory=None,
+                   stop_event=None,on_frame=None,output_dir=None):
     config=load_config(config_path,mode);mode=config['mode']
+    if output_dir is not None:config['output_dir']=str(Path(output_dir).resolve())
     print(f'MODE={mode} | AM output={"ENABLED" if mode=="experiment" else "DISABLED"}',flush=True)
     statecfg=StateConfig(**config['state']);ctrlcfg=ControlConfig(**config['control'])
     electrode_map=load_electrode_map(Path(config['electrode_map']))
@@ -37,10 +39,11 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
     gate=Confirmation(ctrlcfg.source_frames,ctrlcfg.source_duration_s)
     logger=ExperimentLogger(config)
     experiment_id=str(config.get('experiment_id') or Path(config['output_dir']).name)
-    source=None;actuator=None;packet=None;step_open=False;last_state=S.UNKNOWN
+    source=None;actuator=None;packet=None;step_open=False;last_state=S.UNKNOWN;release_confirmed=None
     status='incomplete';reason='end of video';processed=0;last_valid=None;first_time=None;last_applied=None
     emergency_path=Path(config['emergency_stop_file']) if config.get('emergency_stop_file') else None
-    emergency=lambda:bool(emergency_path and emergency_path.exists())
+    emergency=lambda:bool((stop_event is not None and stop_event.is_set()) or
+                          (emergency_path and emergency_path.exists()))
 
     def command_log(t,action,result):
         if result.command_id!='':
@@ -59,10 +62,12 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
         step_open=False
 
     try:
+        if emergency():raise InterruptedError('experiment stop requested')
         segmenter=(segmenter_factory or build_segmenter)(config)
-        if emergency():raise InterruptedError('emergency stop file exists')
+        if emergency():raise InterruptedError('experiment stop requested')
         source=(source_factory(config) if source_factory else
                 VideoSource(config['source']) if mode=='offline' else LiveSource(config['source']))
+        if emergency():raise InterruptedError('experiment stop requested')
         hwconfig=dict(config);hwconfig['_emergency']=emergency
         actuator=(actuator_factory or AMActuator)(mode,hwconfig)
         if mode=='experiment':command_log(time.monotonic(),'Startup release',CommandResult('ALL_OFF',True,True,changes={}))
@@ -70,7 +75,7 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
             started=time.perf_counter();t=packet.timestamp_s
             if first_time is None:first_time=t;last_valid=t;step_open=True
             sid,tid=controller.source,controller.target;phase=controller.phase
-            if emergency():raise InterruptedError('emergency stop file detected')
+            if emergency():raise InterruptedError('experiment stop requested')
             # Do not use a frame acquired before the electrical state was applied.
             before_apply=(mode!='offline' and last_applied is not None and t<last_applied)
             error=''
@@ -118,9 +123,11 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
             # Invalid external masks are not passed to OpenCV visualization.
             if obs.error=='INVALID_MASK':result=VisionResult(None,None,None,0,0,False,obs.error)
             logger.images(packet,result,electrode_map,sid,tid,state.value,decision.action,config['recording'])
+            if on_frame is not None:on_frame(row,packet,result,electrode_map)
             if not command.accepted:status='error';reason=command.error or 'command failed';break
             if decision.action=='Stop':status='stopped';reason=decision.reason;break
             if controller.complete:status='complete';reason='transport complete';break
+            if emergency():status='stopped';reason='experiment stop requested';break
         if step_open:close_step(packet.timestamp_s if packet else first_time,False,last_state,reason)
     except (Exception,KeyboardInterrupt) as exc:
         status='stopped' if isinstance(exc,(KeyboardInterrupt,InterruptedError)) else 'error'
@@ -131,12 +138,14 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
         if actuator is not None:
             try:
                 release=actuator.close();command_log(packet.timestamp_s if packet else None,'Shutdown release',release)
+                release_confirmed=release.accepted
                 if not release.accepted:status='error';reason=reason+'; '+release.error
             except Exception as exc:status='error';reason=reason+'; shutdown: '+str(exc)
         if source is not None:
             try:source.close()
             except Exception as exc:status='error';reason=reason+'; source close: '+str(exc)
         report={'experiment_id':experiment_id,'mode':mode,'status':status,'reason':reason,'frames':processed,
+            'release_confirmed':release_confirmed,
             'output_dir':config['output_dir'],'synthetic_test_only':config.get('synthetic_test_only',False)}
         try:logger.summary(report)
         finally:logger.close()

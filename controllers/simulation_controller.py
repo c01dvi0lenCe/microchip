@@ -126,12 +126,12 @@ class SimulationControllerMixin:
         self.operation_metrics = None
         self.operation_metrics_history.clear()
         self._refresh_metrics_label()
-        self.log("仿真指标已清空")
+        self.log("运行指标已清空")
 
     def export_metrics_csv(self, path=None):
         if path is None:
             selected = filedialog.asksaveasfilename(
-                title="导出仿真指标",
+                title="导出运行指标",
                 defaultextension=".csv",
                 filetypes=(("CSV", "*.csv"), ("All files", "*.*")),
             )
@@ -157,7 +157,7 @@ class SimulationControllerMixin:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(rows)
-        self.log(f"仿真指标已导出: {path}")
+        self.log(f"运行指标已导出: {path}")
         return True
 
     def _reset_droplets_for_operation(self):
@@ -359,7 +359,6 @@ class SimulationControllerMixin:
         dt_s = min(0.25, max(0.0, now - self.manual_last_update_time))
         self.manual_last_update_time = now
         if self._update_manual_droplet_motion(dt_s):
-            self._draw_matrix_canvas()
             self._render_sim_camera_frame(force_display=False)
         self._schedule_manual_simulation_loop()
 

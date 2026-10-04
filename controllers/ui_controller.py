@@ -39,10 +39,12 @@ class UiControllerMixin:
         self.main_notebook = ttk.Notebook(left_panel)
         manual_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         auto_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
-        scope_test_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         self.main_notebook.add(manual_page, text="手动电极")
         self.main_notebook.add(auto_page, text="自动化路径规划")
-        self.main_notebook.add(scope_test_page, text="第一章硬件测试")
+        self.experiment_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
+        self.main_notebook.add(self.experiment_page, text="第二章单液滴实验")
+        self._build_experiment_page(self.experiment_page)
+        self.main_notebook.bind("<<NotebookTabChanged>>", self.on_experiment_tab_changed)
 
         self.manual_matrix_card, self.manual_canvas = self._build_matrix_card(
             manual_page,
@@ -60,8 +62,6 @@ class UiControllerMixin:
             manual=False,
         )
         self.path_matrix_card.pack(fill="both", expand=True)
-
-        self._build_scope_validation_page(scope_test_page)
 
         self.matrix_canvases = [self.manual_canvas, self.path_canvas]
         self.matrix_canvas = self.manual_canvas
@@ -86,7 +86,7 @@ class UiControllerMixin:
 
         self.main_splitter.add(left_panel, minsize=740, stretch="always")
         self.main_splitter.add(right_panel, minsize=460, stretch="always")
-        self.root.after(120, self._set_default_sash)
+        self.sash_after_id = self.root.after(120, self._set_default_sash)
 
     def _set_default_sash(self):
         total_w = self.main_splitter.winfo_width()
@@ -122,6 +122,7 @@ class UiControllerMixin:
 
     def _build_control_card(self, parent):
         card = tk.Frame(parent, bg=self.colors["panel"], bd=1, relief="solid")
+        self.system_control_card = card
         card.pack(fill="x", pady=(0, 6))
 
         tk.Label(
@@ -245,7 +246,7 @@ class UiControllerMixin:
         self.tool_combobox.pack(side="left", padx=(6, 6))
         self._update_operation_specific_controls()
 
-        self.btn_plan = self._make_button(auto_row, "规划路径", self.plan_path, self.colors["btn_off"], self.colors["text"])
+        self.btn_plan = self._make_button(auto_row, "规划路径", self.request_plan_path, self.colors["btn_off"], self.colors["text"])
         self.btn_plan.pack(side="left")
 
         self.btn_auto = self._make_button(auto_row, "开始闭环", self.start_auto_control, self.colors["success"], "white")
@@ -266,6 +267,7 @@ class UiControllerMixin:
         self.auto_status_label.pack(side="right")
 
         step_row = tk.Frame(card, bg=self.colors["panel"])
+        self.sim_step_row = step_row
         step_row.pack(fill="x", padx=10, pady=(0, 4))
 
         tk.Label(step_row, text="步进调试", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
@@ -287,8 +289,9 @@ class UiControllerMixin:
         )
         self.btn_toggle_debug_tests.pack(side="left", padx=(6, 0))
 
-        sim_param_row = tk.Frame(card, bg=self.colors["panel"])
-        sim_param_row.pack(fill="x", padx=10, pady=(0, 4))
+        self.sim_param_row = tk.Frame(card, bg=self.colors["panel"])
+        self.sim_param_row.pack(fill="x", padx=10, pady=(0, 4))
+        sim_param_row = self.sim_param_row
 
         tk.Label(sim_param_row, text="仿真参数", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
         tk.Label(sim_param_row, text="运动真实度", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left", padx=(10, 0))
@@ -330,8 +333,17 @@ class UiControllerMixin:
         )
         self.btn_sim_param_help.pack(side="left", padx=(0, 10))
 
+        self.metrics_row = tk.Frame(card, bg=self.colors["panel"])
+        self.metrics_row.pack(fill="x", padx=10, pady=(0, 4))
+        tk.Label(
+            self.metrics_row,
+            text="运行指标",
+            bg=self.colors["panel"],
+            fg=self.colors["text"],
+        ).pack(side="left")
+
         self.metrics_label = tk.Label(
-            sim_param_row,
+            self.metrics_row,
             text="指标: 0 步 / 0 次重规划",
             bg=self.colors["panel"],
             fg=self.colors["muted"],
@@ -340,7 +352,7 @@ class UiControllerMixin:
         self.metrics_label.pack(side="right")
 
         self.btn_export_metrics = self._make_button(
-            sim_param_row,
+            self.metrics_row,
             "导出指标",
             self.export_metrics_csv,
             self.colors["btn_off"],
@@ -349,7 +361,7 @@ class UiControllerMixin:
         self.btn_export_metrics.pack(side="right", padx=(6, 0))
 
         self.btn_clear_metrics = self._make_button(
-            sim_param_row,
+            self.metrics_row,
             "清空指标",
             self.clear_metrics,
             self.colors["btn_off"],
@@ -426,6 +438,11 @@ class UiControllerMixin:
         messagebox.showinfo("仿真参数说明", self._simulation_parameter_help_text())
 
     def toggle_debug_tests(self):
+        if not self.is_simulation_mode():
+            self.debug_tests_visible = False
+            self.debug_test_row.pack_forget()
+            self.btn_toggle_debug_tests.config(text="显示测试")
+            return
         self.debug_tests_visible = not self.debug_tests_visible
         if self.debug_tests_visible:
             self.debug_test_row.pack(fill="x", padx=10, pady=(0, 4), before=self.cleanup_row)
@@ -645,6 +662,9 @@ class UiControllerMixin:
         return self.mode_var.get() == "仿真"
 
     def on_mode_changed(self, _event=None):
+        if self._experiment_active:
+            self.mode_var.set(self._experiment_previous_mode)
+            return
         if self.auto_running:
             self.stop_auto_control("切换运行模式，闭环已停止")
         if self.camera_running:
@@ -654,7 +674,16 @@ class UiControllerMixin:
                 self.ser.close()
             self._set_connection_state(False)
             self.log("已切换到仿真模式，串口连接已关闭")
+        # Detection results from the previous source must not cross modes.
+        self.latest_detections = []
+        self.detected_positions = []
+        self.detected_cells = []
+        self.detected_position = None
+        self.detected_cell = None
+        self.drop_frame_until = 0.0
+        self.split_forced_failures_remaining = 0
         self._update_mode_ui()
+        self._draw_matrix_canvas()
 
     def on_operation_changed(self, _event=None):
         if self.auto_running:
@@ -683,20 +712,21 @@ class UiControllerMixin:
         self._render_sim_camera_frame()
 
     def _tool_options_for_operation(self):
+        obstacle_tool = self.TOOL_OBSTACLE if self.is_simulation_mode() else self.TOOL_HARDWARE_OBSTACLE
         operation = self.operation_var.get()
         if operation == self.OP_MULTI:
             return (
                 self.TOOL_MULTI_LOAD,
                 self.TOOL_MULTI_INITIAL,
                 self.TOOL_MULTI_SHAPE,
-                self.TOOL_OBSTACLE,
+                obstacle_tool,
             )
         if operation == self.OP_MERGE:
             return (
                 self.TOOL_MERGE_A,
                 self.TOOL_MERGE_B,
                 self.TOOL_MERGE_POINT,
-                self.TOOL_OBSTACLE,
+                obstacle_tool,
             )
         if operation == self.OP_SPLIT:
             return (
@@ -711,7 +741,7 @@ class UiControllerMixin:
         return (
             self.TOOL_MOVE_START,
             self.TOOL_MOVE_GOAL,
-            self.TOOL_OBSTACLE,
+            obstacle_tool,
         )
 
     def _update_tool_options(self):

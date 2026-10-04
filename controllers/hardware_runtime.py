@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from .common import HardwareProtocol, cell_from_electrode_id, electrode_id, messagebox, serial, time, tk
+from .common import (
+    HardwareProtocol,
+    LOG_TRIM_BATCH,
+    MAX_LOG_LINES,
+    cell_from_electrode_id,
+    electrode_id,
+    messagebox,
+    serial,
+    time,
+    tk,
+)
 
 
 class HardwareRuntimeMixin:
     def _update_mode_ui(self):
+        self.root.title(f"数字微流控视觉平台 - {self.rows}x{self.cols} {self.mode_var.get()}上位机")
         if self.is_simulation_mode():
             self.port_combobox.config(state="disabled")
             self.btn_refresh.config(state="disabled")
@@ -19,7 +30,27 @@ class HardwareRuntimeMixin:
             self.btn_connect.config(state="normal")
             self._set_connection_state(self.is_connected, self.port_combobox.get())
             self.auto_status_label.config(text="闭环: 实物待机（相机适配器未配置）", fg=self.colors["muted"])
-        self._update_scope_controls_state()
+        self._update_simulation_control_visibility()
+        self._update_tool_options()
+        if not self.camera_running:
+            self.camera_label.config(image="", text=self._camera_idle_text())
+            self.camera_label.image = None
+
+    def _update_simulation_control_visibility(self):
+        if not hasattr(self, "sim_param_row"):
+            return
+        self.debug_tests_visible = False
+        self.debug_test_row.pack_forget()
+        if self.is_simulation_mode():
+            if not self.sim_param_row.winfo_manager():
+                self.sim_param_row.pack(fill="x", padx=10, pady=(0, 4), before=self.metrics_row)
+            if not self.sim_step_row.winfo_manager():
+                self.sim_step_row.pack(fill="x", padx=10, pady=(0, 4), before=self.sim_param_row)
+        else:
+            self.sim_step_row.pack_forget()
+            self.sim_param_row.pack_forget()
+        if hasattr(self, "btn_toggle_debug_tests"):
+            self.btn_toggle_debug_tests.config(text="显示测试")
 
     def _set_connection_state(self, connected, port_name=""):
         self.is_connected = connected
@@ -32,8 +63,6 @@ class HardwareRuntimeMixin:
         else:
             self.btn_connect.config(text="打开串口", bg=self.colors["accent"], activebackground=self.colors["accent_hover"])
             self.connection_badge.config(text="● 未连接", fg="#A33F3F")
-        if hasattr(self, "btn_scope_start"):
-            self._update_scope_controls_state()
 
     def _set_active_count(self, count):
         self.active_channels = count
@@ -53,6 +82,8 @@ class HardwareRuntimeMixin:
             self.log("未检测到可用串口")
 
     def toggle_connection(self):
+        if self._experiment_active:
+            return
         if self.is_simulation_mode():
             self.log("仿真模式不需要打开串口")
             return
@@ -78,21 +109,20 @@ class HardwareRuntimeMixin:
                     return
                 self.hardware_state_uncertain = False
                 self.hardware_auto_owned = False
-                self.scope_test_running = False
                 self._clear_local_electrode_display()
                 self.log(f"成功连接到 {port}，STM32 已确认 ALL_OFF，会话序列已同步")
             except Exception as exc:
                 messagebox.showerror("错误", str(exc))
         else:
-            if self.scope_test_running and not self.stop_scope_test():
-                self.log("测试停止未确认，仍将断开串口；请断电检查输出")
             if self.ser:
                 self.ser.close()
             self._set_connection_state(False)
-            self._update_scope_controls_state()
             self.log("串口已断开")
 
     def send_command(self, command, log_send=True):
+        if self._experiment_active:
+            self.log("第二章实验运行中，手动串口命令已锁定")
+            return False
         if self.is_simulation_mode():
             if log_send:
                 self.log(f"仿真执行 -> {command}")
@@ -117,18 +147,9 @@ class HardwareRuntimeMixin:
     def _send_transaction_line(self, command):
         return self.send_command(command, log_send=False)
 
-    def _send_scope_test_line(self, command):
-        sent = self.send_command(command, log_send=False)
-        if sent:
-            self.log(f"测试命令 -> {command}")
-        return sent
-
     def _submit_auto_electrode_changes(self, changes):
         if self.is_simulation_mode() or not changes:
             return True
-        if self.scope_test_running:
-            self.log("示波器测试正在独占ROW/COL，自动电极命令已阻止")
-            return False
         result = self.electrode_transactions.apply_changes(changes)
         if result.applied:
             self.hardware_auto_owned = True
@@ -164,6 +185,8 @@ class HardwareRuntimeMixin:
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
             return
+        if self._hardware_manual_control_blocked():
+            return
         current_state = self.buttons[eid]["state"]
         new_state = 1 if current_state == 0 else 0
         self._set_electrode_state(eid, new_state)
@@ -178,6 +201,7 @@ class HardwareRuntimeMixin:
         if self.buttons[eid]["state"] == state:
             return
         self._apply_manual_electrode_changes({eid: state}, log_send=log_send)
+
 
     def manual_toggle_electrode(self, cell, additive=False):
         if self.auto_running:
@@ -203,6 +227,147 @@ class HardwareRuntimeMixin:
         changes = {active_id: 0 for active_id in active_neighbor_ids}
         changes[eid] = 1
         self._apply_manual_electrode_changes(changes)
+
+
+    def _hardware_manual_control_blocked(self):
+        if self._experiment_active:
+            self.log("第二章实验运行中，手动电极控制已锁定")
+            return True
+        if self.is_simulation_mode():
+            return False
+        if self.hardware_state_uncertain:
+            self.log("硬件状态未知，禁止手动操作；请重新连接并确认 ALL_OFF")
+            return True
+        if self.hardware_auto_owned:
+            self.log("PC 自动控制仍占有电极；请先全部关闭以释放手动控制")
+            return True
+        return False
+
+    def _clear_local_electrode_display(self):
+        for info in self.buttons.values():
+            info["state"] = 0
+        self.active_auto_cells = set()
+        self._set_active_count(0)
+        self._draw_matrix_canvas()
+
+    def _release_hardware_auto_ownership(self):
+        if self.is_simulation_mode() or not self.hardware_auto_owned:
+            return True
+        if not self.is_connected or not self.electrode_transactions.all_off():
+            self.hardware_state_uncertain = True
+            self.log("自动任务结束时 ALL_OFF 未确认，硬件状态未知并保持手动锁定")
+            return False
+        self.hardware_state_uncertain = False
+        self.hardware_auto_owned = False
+        self._clear_local_electrode_display()
+        self.log("自动任务结束：STM32 已确认 ALL_OFF，手动控制已释放")
+        return True
+
+    def reset_all(self):
+        if self._experiment_active:
+            self.stop_experiment()
+            return
+        if self.auto_running:
+            self.stop_auto_control("全部关闭")
+        self.log("正在关闭所有电极...")
+
+        if not self.is_simulation_mode() and self.is_connected:
+            if not self.electrode_transactions.all_off():
+                self.hardware_state_uncertain = True
+                self.hardware_auto_owned = True
+                self.log("紧急 ALL_OFF 未收到确认，硬件电极状态未知")
+                self.auto_status_label.config(text="闭环: 硬件状态未知", fg=self.colors["danger"])
+                return
+            self.hardware_state_uncertain = False
+            self.hardware_auto_owned = False
+
+        self._clear_local_electrode_display()
+
+        if self.is_simulation_mode():
+            self.log("仿真后端 -> 全部电极关闭")
+            self._render_sim_camera_frame()
+            return
+        if not self.is_connected:
+            self.log("串口未连接，仅关闭本地显示")
+            return
+        self.log("STM32 已确认紧急 ALL_OFF")
+
+    def update_ui_only(self, eid, state):
+        if eid not in self.buttons:
+            return
+        old_state = self.buttons[eid]["state"]
+        self.buttons[eid]["state"] = 1 if state else 0
+        if old_state != self.buttons[eid]["state"]:
+            delta = 1 if self.buttons[eid]["state"] == 1 else -1
+            new_count = max(0, min(self.total_channels, self.active_channels + delta))
+            self._set_active_count(new_count)
+        self._draw_matrix_canvas()
+
+    def receive_data(self):
+        while not self.stop_event.is_set():
+            if self.is_connected and self.ser:
+                try:
+                    if self.ser.in_waiting:
+                        line = self.ser.readline().decode("utf-8", errors="ignore").strip()
+                        if line:
+                            if self.electrode_transactions.feed_line(line):
+                                if line.startswith("ERR:"):
+                                    self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
+                            elif line.startswith("SYNC:"):
+                                parts = line.split(":")
+                                if len(parts) == 3:
+                                    try:
+                                        p_id = int(parts[1])
+                                        p_state = int(parts[2])
+                                        self.root.after(0, self.update_ui_only, p_id, p_state)
+                                    except ValueError:
+                                        self.root.after(0, self.log, f"同步数据格式错误: {line}")
+                            else:
+                                self.root.after(0, self.log, f"收到 <- {line}")
+                except Exception as exc:
+                    self.root.after(0, self.log, f"接收错误: {exc}")
+                    time.sleep(1)
+            time.sleep(0.01)
+
+    def log(self, msg):
+        timestamp = time.strftime("%H:%M:%S")
+        self.log_text.config(state="normal")
+        self.log_text.insert(tk.END, f"[{timestamp}] {msg}\n")
+        line_count = int(self.log_text.index("end-1c").split(".")[0])
+        if line_count > MAX_LOG_LINES:
+            self.log_text.delete("1.0", f"{min(LOG_TRIM_BATCH + 1, line_count)}.0")
+        self.log_text.see(tk.END)
+        self.log_text.config(state="disabled")
+
+    def log_feedback(self, action, msg, key=None, interval_s=0.6, force=False):
+        log_key = key or f"{action}:{msg}"
+        now = time.monotonic()
+        last = self.feedback_log_times.get(log_key, 0.0)
+        if not force and now - last < interval_s:
+            return
+        self.feedback_log_times[log_key] = now
+        self.log(f"修正反馈[{action}] {msg}")
+
+    def on_close(self):
+        if self._experiment_active:
+            self._experiment_closing = True
+            self.stop_experiment()
+            return
+        self.stop_event.set()
+        self.auto_running = False
+        self.camera_running = False
+        for after_id in (self.auto_after_id, self.camera_after_id, self.manual_after_id,
+                         self.planning_poll_after_id, self.experiment_after_id, self.sash_after_id):
+            if after_id is not None:
+                try:
+                    self.root.after_cancel(after_id)
+                except Exception:
+                    pass
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+        if self.camera_thread:
+            self.camera_thread.join(timeout=1)
+        self.root.destroy()
 
     def _apply_manual_electrode_changes(self, changes, log_send=True):
         effective_changes = {
@@ -238,141 +403,3 @@ class HardwareRuntimeMixin:
             self.update_ui_only(changed_id, changed_state)
             self.send_command(HardwareProtocol.set_electrode(changed_id, changed_state), log_send=log_send)
         return True
-
-    def _hardware_manual_control_blocked(self):
-        if self.is_simulation_mode():
-            return False
-        if self.hardware_state_uncertain:
-            self.log("硬件状态未知，禁止手动操作；请重新连接并确认 ALL_OFF")
-            return True
-        if self.scope_test_running:
-            self.log("示波器测试正在独占ROW/COL；请先停止测试")
-            return True
-        if self.hardware_auto_owned:
-            self.log("PC 自动控制仍占有电极；请先全部关闭以释放手动控制")
-            return True
-        return False
-
-    def _clear_local_electrode_display(self):
-        for info in self.buttons.values():
-            info["state"] = 0
-        self.active_auto_cells = set()
-        self._set_active_count(0)
-        self._draw_matrix_canvas()
-
-    def _release_hardware_auto_ownership(self):
-        if self.is_simulation_mode() or not self.hardware_auto_owned:
-            return True
-        if not self.is_connected or not self.electrode_transactions.all_off():
-            self.hardware_state_uncertain = True
-            self.log("自动任务结束时 ALL_OFF 未确认，硬件状态未知并保持手动锁定")
-            return False
-        self.hardware_state_uncertain = False
-        self.hardware_auto_owned = False
-        self._clear_local_electrode_display()
-        self.log("自动任务结束：STM32 已确认 ALL_OFF，手动控制已释放")
-        return True
-
-    def reset_all(self):
-        if self.auto_running:
-            self.stop_auto_control("全部关闭")
-        self.log("正在关闭所有电极...")
-
-        if not self.is_simulation_mode() and self.is_connected:
-            if not self.electrode_transactions.all_off():
-                self.hardware_state_uncertain = True
-                self.hardware_auto_owned = True
-                self.log("紧急 ALL_OFF 未收到确认，硬件电极状态未知")
-                self.auto_status_label.config(text="闭环: 硬件状态未知", fg=self.colors["danger"])
-                return
-            self.hardware_state_uncertain = False
-            self.hardware_auto_owned = False
-            self.scope_test_running = False
-
-        self._clear_local_electrode_display()
-        if hasattr(self, "scope_status_label") and not self.scope_test_running:
-            self.scope_status_label.config(text="测试: 已停止并全关", fg=self.colors["muted"])
-            self._update_scope_controls_state()
-
-        if self.is_simulation_mode():
-            self.log("仿真后端 -> 全部电极关闭")
-            self._render_sim_camera_frame()
-            return
-        if not self.is_connected:
-            self.log("串口未连接，仅关闭本地显示")
-            return
-        self.log("STM32 已确认紧急 ALL_OFF")
-
-    def update_ui_only(self, eid, state):
-        if eid not in self.buttons:
-            return
-        old_state = self.buttons[eid]["state"]
-        self.buttons[eid]["state"] = 1 if state else 0
-        if old_state != self.buttons[eid]["state"]:
-            delta = 1 if self.buttons[eid]["state"] == 1 else -1
-            new_count = max(0, min(self.total_channels, self.active_channels + delta))
-            self._set_active_count(new_count)
-        self._draw_matrix_canvas()
-
-    def receive_data(self):
-        while not self.stop_event.is_set():
-            if self.is_connected and self.ser:
-                try:
-                    if self.ser.in_waiting:
-                        line = self.ser.readline().decode("utf-8", errors="ignore").strip()
-                        if line:
-                            if self.scope_test_client.feed_line(line):
-                                if line.startswith("ERR:CH1:"):
-                                    self.root.after(0, self.log, f"STM32测试错误 <- {line}")
-                            elif self.electrode_transactions.feed_line(line):
-                                if line.startswith("ERR:"):
-                                    self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
-                            elif line.startswith("SYNC:"):
-                                parts = line.split(":")
-                                if len(parts) == 3:
-                                    try:
-                                        p_id = int(parts[1])
-                                        p_state = int(parts[2])
-                                        self.root.after(0, self.update_ui_only, p_id, p_state)
-                                    except ValueError:
-                                        self.root.after(0, self.log, f"同步数据格式错误: {line}")
-                            else:
-                                self.root.after(0, self.log, f"收到 <- {line}")
-                except Exception as exc:
-                    self.root.after(0, self.log, f"接收错误: {exc}")
-                    time.sleep(1)
-            time.sleep(0.01)
-
-    def log(self, msg):
-        timestamp = time.strftime("%H:%M:%S")
-        self.log_text.config(state="normal")
-        self.log_text.insert(tk.END, f"[{timestamp}] {msg}\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state="disabled")
-
-    def log_feedback(self, action, msg, key=None, interval_s=0.6, force=False):
-        log_key = key or f"{action}:{msg}"
-        now = time.monotonic()
-        last = self.feedback_log_times.get(log_key, 0.0)
-        if not force and now - last < interval_s:
-            return
-        self.feedback_log_times[log_key] = now
-        self.log(f"修正反馈[{action}] {msg}")
-
-    def on_close(self):
-        if self.scope_test_running and self.is_connected:
-            self.stop_scope_test()
-        self.stop_event.set()
-        self.auto_running = False
-        self.camera_running = False
-        for after_id in (self.auto_after_id, self.camera_after_id, self.manual_after_id):
-            if after_id is not None:
-                try:
-                    self.root.after_cancel(after_id)
-                except Exception:
-                    pass
-        if self.ser and self.ser.is_open:
-            self.ser.close()
-        if self.camera_thread:
-            self.camera_thread.join(timeout=1)
-        self.root.destroy()

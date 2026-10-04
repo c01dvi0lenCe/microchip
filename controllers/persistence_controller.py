@@ -10,7 +10,7 @@ class PersistenceControllerMixin:
         if path is None:
             self.preset_dir.mkdir(parents=True, exist_ok=True)
             selected = filedialog.asksaveasfilename(
-                title="保存仿真设置",
+                title="保存运行设置",
                 initialdir=str(self.preset_dir),
                 initialfile="dmf_preset.json",
                 defaultextension=".json",
@@ -28,11 +28,14 @@ class PersistenceControllerMixin:
             "operation": self.operation_var.get(),
             "tool": self.tool_var.get(),
             "mode": self.mode_var.get(),
-            "motion_profile": self.motion_profile_var.get(),
-            "vision_noise": self.vision_noise_var.get(),
-            "fault_mode": self.fault_mode_var.get(),
             "settings": self._serialize_settings_snapshot(self._settings_snapshot()),
         }
+        if self.is_simulation_mode():
+            payload.update(
+                motion_profile=self.motion_profile_var.get(),
+                vision_noise=self.vision_noise_var.get(),
+                fault_mode=self.fault_mode_var.get(),
+            )
         with path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=False, indent=2)
         self.log(f"设置已保存 -> {path}")
@@ -46,7 +49,7 @@ class PersistenceControllerMixin:
         if path is None:
             self.preset_dir.mkdir(parents=True, exist_ok=True)
             selected = filedialog.askopenfilename(
-                title="导入仿真设置",
+                title="导入运行设置",
                 initialdir=str(self.preset_dir),
                 filetypes=(("JSON", "*.json"), ("All files", "*.*")),
             )
@@ -69,6 +72,7 @@ class PersistenceControllerMixin:
         self.tool_var.set(tool)
         if payload.get("mode"):
             self.mode_var.set(payload["mode"])
+            self.on_mode_changed()
         if payload.get("motion_profile"):
             self.motion_profile_var.set(payload["motion_profile"])
         if payload.get("vision_noise"):

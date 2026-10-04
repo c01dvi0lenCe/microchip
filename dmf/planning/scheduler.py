@@ -11,11 +11,10 @@ from ..layout import (
     MAX_PARALLEL_MULTI_DROPLETS,
     RESERVOIR_DROPLET_CAPACITY,
     electrode_id,
-    in_pull_risk_zone,
     is_core_cell,
     is_reservoir_cell,
 )
-from .geometry import target_merge_region_map
+from .geometry import pull_risk_neighbors, target_merge_region_map
 
 
 def schedule_multi_paths(
@@ -439,7 +438,7 @@ def _first_target_blocker_index(
         if _same_merge_region(target, settled_target, merge_regions):
             continue
         for cell in path[:-1]:
-            if cell == settled_target or in_pull_risk_zone(cell, settled_target):
+            if cell == settled_target or settled_target in pull_risk_neighbors(cell):
                 return idx
     return None
 
@@ -500,7 +499,7 @@ def _multi_step_conflicts(
         if (
             current_is_moving
             and other_prev is not None
-            and in_pull_risk_zone(candidate_cell, other_prev)
+            and other_prev in pull_risk_neighbors(candidate_cell)
             and not _can_share_settled_goal_risk(
                 candidate_cell,
                 own_goal,
@@ -514,7 +513,7 @@ def _multi_step_conflicts(
         if (
             other_is_moving
             and previous_cell is not None
-            and in_pull_risk_zone(other_now, previous_cell)
+            and previous_cell in pull_risk_neighbors(other_now)
             and not _can_share_settled_goal_risk(
                 previous_cell,
                 own_goal,
@@ -525,7 +524,7 @@ def _multi_step_conflicts(
             )
         ):
             return True
-        if in_pull_risk_zone(candidate_cell, other_now):
+        if other_now in pull_risk_neighbors(candidate_cell):
             if not _can_share_settled_goal_risk(
                 candidate_cell,
                 own_goal,
@@ -575,7 +574,7 @@ def _settled_goal_would_block_future_transport(
                 continue
             if other_now == settled_goal:
                 return True
-            if not in_pull_risk_zone(settled_goal, other_now):
+            if other_now not in pull_risk_neighbors(settled_goal):
                 continue
             if _can_share_settled_goal_risk(
                 settled_goal,

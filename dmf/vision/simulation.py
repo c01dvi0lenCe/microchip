@@ -409,10 +409,11 @@ class DropletDetector:
     def _droplet_color_mask(frame_rgb: np.ndarray) -> np.ndarray:
         frame = frame_rgb.astype(np.int32)
         mask = np.zeros(frame.shape[:2], dtype=bool)
+        tolerance_squared = DROPLET_DETECTION_TOLERANCE**2
         for color in DROPLET_DETECTION_RGB:
             diff = frame - np.array(color, dtype=np.int32)
-            distance = np.sqrt(np.sum(diff * diff, axis=2))
-            mask |= distance <= DROPLET_DETECTION_TOLERANCE
+            distance_squared = np.sum(diff * diff, axis=2)
+            mask |= distance_squared <= tolerance_squared
         return mask
 
     def _build_detection(self, x: float, y: float, area: float) -> Detection:

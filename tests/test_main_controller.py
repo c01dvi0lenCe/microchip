@@ -1,8 +1,10 @@
 import tkinter as tk
 import csv
 import tempfile
+import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -91,88 +93,14 @@ class MainControllerLayoutTests(unittest.TestCase):
     def test_main_notebook_defaults_to_manual_electrode_page(self):
         tabs = [self.app.main_notebook.tab(tab_id, "text") for tab_id in self.app.main_notebook.tabs()]
         self.assertEqual(tabs[:2], ["手动电极", "自动化路径规划"])
-        self.assertEqual(tabs[2], "第一章硬件测试")
         self.assertEqual(self.app.main_notebook.tab(self.app.main_notebook.select(), "text"), "手动电极")
-
-    def test_scope_test_page_maps_col21_and_preserves_existing_pages(self):
-        self.app.scope_test_row_var.set(20)
-        self.app.scope_test_col_var.set(21)
-        self.app.on_scope_config_changed()
-
-        self.assertEqual(self.app._scope_test_config().id_a, 420)
-        self.assertEqual(self.app.scope_target_widgets[0][2].cget("text"), "ID 420")
-        self.assertEqual(self.app.main_notebook.tab(self.app.main_notebook.tabs()[0], "text"), "手动电极")
-
-    def test_scope_test_start_uses_exclusive_firmware_command(self):
-        calls = []
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.scope_test_client = SimpleNamespace(
-            start=lambda config: calls.append(config.start_command())
-            or SimpleNamespace(ok=True, error=""),
-            stop=lambda: SimpleNamespace(ok=True, error=""),
-        )
-
-        started = self.app.start_scope_test()
-
-        self.assertTrue(started)
-        self.assertTrue(self.app.scope_test_running)
-        self.assertTrue(self.app.hardware_auto_owned)
-        self.assertEqual(calls, ["CH1:START:H3A:1:1:1:2:HIGH_EARLY"])
-
-    def test_scope_start_failure_displays_firmware_error(self):
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.scope_test_client = SimpleNamespace(
-            start=lambda config: SimpleNamespace(
-                ok=False,
-                error="ERR:CH1:MODE",
-                response="ERR:CH1:MODE",
-            )
-        )
-
-        self.assertFalse(self.app.start_scope_test())
-        self.assertIn("ERR:CH1:MODE", self.app.scope_status_label.cget("text"))
-
-    def test_scope_retention_mode_exposes_selected_scan_frequency(self):
-        retention_label = next(label for label in self.app.SCOPE_MODE_OPTIONS if "RET_ARRAY20" in label)
-        self.app.scope_test_mode_var.set(retention_label)
-        self.app.scope_test_frequency_var.set(200)
-        self.app.on_scope_config_changed()
-
-        config = self.app._scope_test_config()
-
-        self.assertEqual(config.mode, "RET_ARRAY20")
-        self.assertEqual(config.scan_frequency_hz, 200)
-        self.assertEqual(str(self.app.scope_frequency_combobox.cget("state")), "readonly")
-        self.assertIn("20行逐行扫描", self.app.scope_instruction_label.cget("text"))
-        self.assertIn("200 Hz", self.app.scope_instruction_label.cget("text"))
-
-    def test_scope_retention_start_displays_firmware_actual_timing(self):
-        retention_label = next(label for label in self.app.SCOPE_MODE_OPTIONS if "RET_ARRAY20" in label)
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.scope_test_mode_var.set(retention_label)
-        self.app.scope_test_frequency_var.set(800)
-        self.app.scope_test_client = SimpleNamespace(
-            start=lambda config: SimpleNamespace(
-                ok=True,
-                error="",
-                response="ACK:CH1:START:RET_ARRAY20:800:1240:62:55",
-            ),
-            stop=lambda: SimpleNamespace(ok=True, error=""),
-        )
-
-        self.assertTrue(self.app.start_scope_test())
-        status = self.app.scope_status_label.cget("text")
-        self.assertIn("800 Hz", status)
-        self.assertIn("帧1240 us", status)
-        self.assertIn("行62 us", status)
-        self.assertIn("ROW高55 us", status)
 
     def test_window_uses_digital_microfluidics_visual_platform_name(self):
         self.assertIn("数字微流控视觉平台", self.root.title())
         self.assertEqual(self.app.title_label.cget("text"), "数字微流控视觉平台")
+
+    def test_controller_uses_preview_sized_simulation_frame(self):
+        self.assertEqual(self.app.sim_camera.frame_size, (520, 520))
 
     def test_log_card_is_below_visual_feedback_on_right_side(self):
         panes = [str(pane) for pane in self.app.right_splitter.panes()]
@@ -190,6 +118,61 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertIn("视觉噪声", help_text)
         self.assertIn("故障模式", help_text)
         self.assertIn("异常保护", help_text)
+
+    def test_hardware_mode_hides_simulation_only_controls(self):
+        self.assertTrue(self.app.sim_param_row.winfo_manager())
+
+        self.app.mode_var.set("实物")
+        self.app._update_mode_ui()
+        self.root.update_idletasks()
+
+        self.assertFalse(self.app.sim_param_row.winfo_manager())
+        self.assertFalse(self.app.debug_test_row.winfo_manager())
+        self.assertTrue(self.app.metrics_row.winfo_manager())
+
+        self.app.mode_var.set("仿真")
+        self.app._update_mode_ui()
+        self.root.update_idletasks()
+
+        self.assertTrue(self.app.sim_param_row.winfo_manager())
+        self.assertFalse(self.app.debug_test_row.winfo_manager())
+
+    def test_hardware_automatic_planning_uses_failed_electrode_label(self):
+        self.app.mode_var.set("实物")
+        self.app.operation_var.set(self.app.OP_MOVE)
+        self.app._update_mode_ui()
+
+        self.assertIn(self.app.TOOL_HARDWARE_OBSTACLE, self.app.tool_combobox["values"])
+        self.assertNotIn(self.app.TOOL_OBSTACLE, self.app.tool_combobox["values"])
+
+    def test_manual_motion_tick_does_not_redraw_before_camera_render(self):
+        draw_calls = []
+        self.app._update_manual_droplet_motion = lambda _dt: True
+        self.app._draw_matrix_canvas = lambda: draw_calls.append("draw")
+        self.app._render_sim_camera_frame = lambda force_display=False: None
+        self.app._schedule_manual_simulation_loop = lambda: None
+
+        self.app._manual_simulation_loop()
+
+        self.assertEqual(draw_calls, [])
+
+    def test_log_widget_retains_a_bounded_recent_history(self):
+        self.app.log_text.config(state="normal")
+        self.app.log_text.delete("1.0", tk.END)
+        self.app.log_text.config(state="disabled")
+
+        with (
+            patch("controllers.hardware_runtime.MAX_LOG_LINES", 20),
+            patch("controllers.hardware_runtime.LOG_TRIM_BATCH", 5),
+        ):
+            for index in range(30):
+                self.app.log(f"line-{index}")
+
+        line_count = int(self.app.log_text.index("end-1c").split(".")[0])
+        contents = self.app.log_text.get("1.0", tk.END)
+        self.assertLessEqual(line_count, 20)
+        self.assertNotIn("line-0\n", contents)
+        self.assertIn("line-29", contents)
 
     def test_multi_operation_uses_reservoir_wording_not_loading_wording(self):
         self.app.operation_var.set(self.app.OP_MULTI)
@@ -352,6 +335,62 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.assertEqual(assignments[0].source, (4, 4))
         self.assertEqual(assignments[0].target, (4, 6))
 
+    def test_multi_planning_request_returns_without_blocking_ui(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.initial_droplet_cells = {(4, 4)}
+        self.app.target_shape_cells = [(4, 6)]
+        release = threading.Event()
+
+        def wait_for_release(_request):
+            release.wait(1.0)
+            return []
+
+        self.app._compute_multi_plan_request = wait_for_release
+
+        started_at = time.perf_counter()
+        accepted = self.app.request_plan_path()
+        elapsed = time.perf_counter() - started_at
+
+        self.assertTrue(accepted)
+        self.assertLess(elapsed, 0.1)
+        self.assertTrue(self.app.planning_jobs.is_active)
+        self.assertEqual(str(self.app.btn_plan.cget("state")), "disabled")
+        release.set()
+        self.app.planning_jobs.join_for_test(1.0)
+        self.app._drain_planning_jobs()
+
+    def test_multi_planning_discards_result_after_settings_change(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.initial_droplet_cells = {(4, 4)}
+        self.app.target_shape_cells = [(4, 6)]
+        applied = []
+        self.app._compute_multi_plan_request = lambda _request: [object()]
+        self.app._apply_multi_plan = lambda assignments: applied.append(assignments)
+
+        self.assertTrue(self.app.request_plan_path())
+        self.app.planning_jobs.join_for_test(1.0)
+        self.app.target_shape_cells = [(4, 7)]
+        self.app._drain_planning_jobs()
+
+        self.assertEqual(applied, [])
+        self.assertEqual(str(self.app.btn_plan.cget("state")), "normal")
+
+    def test_multi_planning_applies_current_result_on_ui_drain(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.initial_droplet_cells = {(4, 4)}
+        self.app.target_shape_cells = [(4, 6)]
+        result = [object()]
+        applied = []
+        self.app._compute_multi_plan_request = lambda _request: result
+        self.app._apply_multi_plan = lambda assignments: applied.append(assignments) or assignments
+
+        self.assertTrue(self.app.request_plan_path())
+        self.app.planning_jobs.join_for_test(1.0)
+        self.app._drain_planning_jobs()
+
+        self.assertEqual(applied, [result])
+        self.assertEqual(str(self.app.btn_plan.cget("state")), "normal")
+
     def test_initial_core_droplet_can_only_fill_one_multi_target(self):
         self.app.operation_var.set(self.app.OP_MULTI)
         self.app._update_tool_options()
@@ -503,76 +542,6 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertEqual(self.app._active_cells(), {(3, 3), (3, 4)})
 
-    def test_manual_canvas_ctrl_click_adds_another_active(self):
-        original = self.app._canvas_to_cell
-        cells = iter([(3, 3), (3, 4)])
-        self.app._canvas_to_cell = lambda _x, _y: next(cells)
-        try:
-            self.app.on_matrix_click(
-                SimpleNamespace(widget=self.app.manual_canvas, x=0, y=0, state=0),
-                manual=True,
-            )
-            self.app.on_matrix_click(
-                SimpleNamespace(widget=self.app.manual_canvas, x=0, y=0, state=0x0004),
-                manual=True,
-            )
-        finally:
-            self.app._canvas_to_cell = original
-
-        self.assertEqual(self.app._active_cells(), {(3, 3), (3, 4)})
-
-    def test_hardware_manual_click_uses_atomic_transaction(self):
-        submitted = []
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.electrode_transactions = SimpleNamespace(
-            apply_changes=lambda changes: submitted.append(dict(changes))
-            or TransactionResult(sequence=21, attempts=1, applied=True)
-        )
-
-        self.app.manual_toggle_electrode((3, 3), additive=False)
-
-        self.assertEqual(submitted, [{electrode_id(3, 3, self.app.cols): 1}])
-        self.assertEqual(self.app._active_cells(), {(3, 3)})
-
-    def test_hardware_manual_adjacent_click_batches_off_and_on(self):
-        submitted = []
-        old_id = electrode_id(3, 3, self.app.cols)
-        new_id = electrode_id(3, 4, self.app.cols)
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.update_ui_only(old_id, 1)
-        self.app.electrode_transactions = SimpleNamespace(
-            apply_changes=lambda changes: submitted.append(dict(changes))
-            or TransactionResult(sequence=22, attempts=1, applied=True)
-        )
-
-        self.app.manual_toggle_electrode((3, 4), additive=False)
-
-        self.assertEqual(submitted, [{old_id: 0, new_id: 1}])
-        self.assertEqual(self.app._active_cells(), {(3, 4)})
-
-    def test_failed_hardware_manual_transaction_does_not_change_display(self):
-        submitted = []
-        eid = electrode_id(3, 3, self.app.cols)
-        self.app.mode_var.set("实物")
-        self.app.is_connected = True
-        self.app.electrode_transactions = SimpleNamespace(
-            apply_changes=lambda changes: submitted.append(dict(changes))
-            or TransactionResult(
-                sequence=23,
-                attempts=3,
-                applied=False,
-                error="APPLIED acknowledgement timeout",
-            )
-        )
-
-        self.app.manual_toggle_electrode((3, 3), additive=False)
-
-        self.assertEqual(submitted, [{eid: 1}])
-        self.assertEqual(self.app._active_cells(), set())
-        self.assertTrue(self.app.hardware_state_uncertain)
-
     def test_top_corner_reservoir_does_not_overlap_core_array(self):
         self.app.matrix_canvas = self.app.manual_canvas
         self.root.update_idletasks()
@@ -582,148 +551,6 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertTrue(rects)
         self.assertFalse(any(x1 > left and y1 > top for _x0, _y0, x1, y1 in rects))
-
-    def test_manual_canvas_uses_available_space_for_readable_core_cells(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        self.root.update_idletasks()
-
-        _left, _top, _grid_w, _grid_h, cell_size = self.app._grid_geometry()
-
-        self.assertGreaterEqual(cell_size, 22.0)
-
-    def test_large_side_reservoirs_are_compact(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        _left, _top, _grid_w, _grid_h, cell_size = self.app._grid_geometry()
-
-        x0, y0, x1, y1 = self.app._reservoir_rect((-3, 6))
-
-        self.assertAlmostEqual(x1 - x0, cell_size * 1.15)
-        self.assertAlmostEqual(y1 - y0, cell_size * 1.15)
-
-    def test_side_reservoir_electrodes_touch_each_other_and_core(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-
-        large = self.app._reservoir_rect((-3, 6))
-        small = self.app._reservoir_rect((-1, 6))
-        core = self.app._cell_rect((0, 6))
-
-        self.assertAlmostEqual(large[3], small[1])
-        self.assertAlmostEqual(small[3], core[1])
-
-    def test_corner_reservoir_ids_are_positioned_in_outer_corner(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        self.app._draw_matrix_canvas_one()
-        canvas = self.app.manual_canvas
-
-        for eid in (417, 418, 419, 420):
-            item = next(
-                item
-                for item in canvas.find_all()
-                if canvas.type(item) == "text" and canvas.itemcget(item, "text") == str(eid)
-            )
-            cell = cell_from_electrode_id(eid, self.app.cols)
-            x0, y0, x1, y1 = self.app._cell_text_rect(cell)
-            self.assertEqual(canvas.coords(item), [(x0 + x1) / 2, (y0 + y1) / 2])
-
-    def test_adjacent_core_electrodes_share_an_edge(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        canvas = self.app.manual_canvas
-        canvas.delete("all")
-
-        self.app._draw_cell((0, 0))
-        self.app._draw_cell((0, 1))
-        first, second = canvas.find_all()
-
-        self.assertAlmostEqual(canvas.coords(first)[2], canvas.coords(second)[0])
-
-    def test_manual_core_electrode_ids_fit_inside_their_cells(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        self.app._draw_matrix_canvas_one()
-        self.root.update_idletasks()
-        canvas = self.app.manual_canvas
-        text_items = {
-            int(canvas.itemcget(item, "text")): item
-            for item in canvas.find_all()
-            if canvas.type(item) == "text"
-            and canvas.itemcget(item, "text").isdigit()
-            and int(canvas.itemcget(item, "text")) <= 400
-        }
-
-        self.assertEqual(len(text_items), 400)
-        for eid, item in text_items.items():
-            row, col = divmod(eid - 1, self.app.cols)
-            x0, y0, x1, y1 = self.app._cell_rect((row, col))
-            tx0, ty0, tx1, ty1 = canvas.bbox(item)
-            self.assertGreaterEqual(tx0, x0 - 1)
-            self.assertGreaterEqual(ty0, y0 - 1)
-            self.assertLessEqual(tx1, x1 + 1)
-            self.assertLessEqual(ty1, y1 + 1)
-
-    def test_manual_reservoir_ids_fit_inside_their_label_areas(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        self.app._draw_matrix_canvas_one()
-        canvas = self.app.manual_canvas
-        text_items = {
-            int(canvas.itemcget(item, "text")): item
-            for item in canvas.find_all()
-            if canvas.type(item) == "text" and canvas.itemcget(item, "text").isdigit()
-        }
-
-        for eid in range(401, 421):
-            cell = cell_from_electrode_id(eid, self.app.cols)
-            x0, y0, x1, y1 = self.app._cell_text_rect(cell)
-            tx0, ty0, tx1, ty1 = canvas.bbox(text_items[eid])
-            self.assertGreaterEqual(tx0, x0 - 1)
-            self.assertGreaterEqual(ty0, y0 - 1)
-            self.assertLessEqual(tx1, x1 + 1)
-            self.assertLessEqual(ty1, y1 + 1)
-
-    def test_manual_reservoir_ids_use_high_contrast_text(self):
-        self.app.matrix_canvas = self.app.manual_canvas
-        self.app.manual_canvas.winfo_width = lambda: 650
-        self.app.manual_canvas.winfo_height = lambda: 600
-        self.app._draw_matrix_canvas_one()
-        canvas = self.app.manual_canvas
-
-        reservoir_items = [
-            item
-            for item in canvas.find_all()
-            if canvas.type(item) == "text"
-            and canvas.itemcget(item, "text").isdigit()
-            and 401 <= int(canvas.itemcget(item, "text")) <= 420
-        ]
-
-        self.assertEqual(len(reservoir_items), 20)
-        self.assertTrue(all(canvas.itemcget(item, "fill") == "white" for item in reservoir_items))
-
-    def test_camera_preview_resolves_layout_before_choosing_first_size(self):
-        widths = iter((1, 558))
-        heights = iter((1, 489))
-        original_width = self.app.camera_label.winfo_width
-        original_height = self.app.camera_label.winfo_height
-        self.app.camera_label.winfo_width = lambda: next(widths)
-        self.app.camera_label.winfo_height = lambda: next(heights)
-        try:
-            target = self.app._camera_preview_target_size()
-        finally:
-            self.app.camera_label.winfo_width = original_width
-            self.app.camera_label.winfo_height = original_height
-
-        self.assertEqual(target, (520, 489))
 
     def test_corner_reservoir_uses_three_cell_l_shape_touching_core_corner(self):
         self.app.matrix_canvas = self.app.manual_canvas
@@ -1527,6 +1354,231 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertEqual(rows[0]["operation"], "move")
         self.assertEqual(rows[0]["total_steps"], "1")
+
+    def test_manual_canvas_ctrl_click_adds_another_active(self):
+        original = self.app._canvas_to_cell
+        cells = iter([(3, 3), (3, 4)])
+        self.app._canvas_to_cell = lambda _x, _y: next(cells)
+        try:
+            self.app.on_matrix_click(
+                SimpleNamespace(widget=self.app.manual_canvas, x=0, y=0, state=0),
+                manual=True,
+            )
+            self.app.on_matrix_click(
+                SimpleNamespace(widget=self.app.manual_canvas, x=0, y=0, state=0x0004),
+                manual=True,
+            )
+        finally:
+            self.app._canvas_to_cell = original
+
+        self.assertEqual(self.app._active_cells(), {(3, 3), (3, 4)})
+
+
+    def test_hardware_manual_click_uses_atomic_transaction(self):
+        submitted = []
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.electrode_transactions = SimpleNamespace(
+            apply_changes=lambda changes: submitted.append(dict(changes))
+            or TransactionResult(sequence=21, attempts=1, applied=True)
+        )
+
+        self.app.manual_toggle_electrode((3, 3), additive=False)
+
+        self.assertEqual(submitted, [{electrode_id(3, 3, self.app.cols): 1}])
+        self.assertEqual(self.app._active_cells(), {(3, 3)})
+
+
+    def test_hardware_manual_adjacent_click_batches_off_and_on(self):
+        submitted = []
+        old_id = electrode_id(3, 3, self.app.cols)
+        new_id = electrode_id(3, 4, self.app.cols)
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.update_ui_only(old_id, 1)
+        self.app.electrode_transactions = SimpleNamespace(
+            apply_changes=lambda changes: submitted.append(dict(changes))
+            or TransactionResult(sequence=22, attempts=1, applied=True)
+        )
+
+        self.app.manual_toggle_electrode((3, 4), additive=False)
+
+        self.assertEqual(submitted, [{old_id: 0, new_id: 1}])
+        self.assertEqual(self.app._active_cells(), {(3, 4)})
+
+
+    def test_failed_hardware_manual_transaction_does_not_change_display(self):
+        submitted = []
+        eid = electrode_id(3, 3, self.app.cols)
+        self.app.mode_var.set("实物")
+        self.app.is_connected = True
+        self.app.electrode_transactions = SimpleNamespace(
+            apply_changes=lambda changes: submitted.append(dict(changes))
+            or TransactionResult(
+                sequence=23,
+                attempts=3,
+                applied=False,
+                error="APPLIED acknowledgement timeout",
+            )
+        )
+
+        self.app.manual_toggle_electrode((3, 3), additive=False)
+
+        self.assertEqual(submitted, [{eid: 1}])
+        self.assertEqual(self.app._active_cells(), set())
+        self.assertTrue(self.app.hardware_state_uncertain)
+
+
+    def test_manual_canvas_uses_available_space_for_readable_core_cells(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        self.root.update_idletasks()
+
+        _left, _top, _grid_w, _grid_h, cell_size = self.app._grid_geometry()
+
+        self.assertGreaterEqual(cell_size, 22.0)
+
+
+    def test_large_side_reservoirs_are_compact(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        _left, _top, _grid_w, _grid_h, cell_size = self.app._grid_geometry()
+
+        x0, y0, x1, y1 = self.app._reservoir_rect((-3, 6))
+
+        self.assertAlmostEqual(x1 - x0, cell_size * 1.15)
+        self.assertAlmostEqual(y1 - y0, cell_size * 1.15)
+
+
+    def test_side_reservoir_electrodes_touch_each_other_and_core(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+
+        large = self.app._reservoir_rect((-3, 6))
+        small = self.app._reservoir_rect((-1, 6))
+        core = self.app._cell_rect((0, 6))
+
+        self.assertAlmostEqual(large[3], small[1])
+        self.assertAlmostEqual(small[3], core[1])
+
+
+    def test_corner_reservoir_ids_are_positioned_in_outer_corner(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        self.app._draw_matrix_canvas_one()
+        canvas = self.app.manual_canvas
+
+        for eid in (417, 418, 419, 420):
+            item = next(
+                item
+                for item in canvas.find_all()
+                if canvas.type(item) == "text" and canvas.itemcget(item, "text") == str(eid)
+            )
+            cell = cell_from_electrode_id(eid, self.app.cols)
+            x0, y0, x1, y1 = self.app._cell_text_rect(cell)
+            self.assertEqual(canvas.coords(item), [(x0 + x1) / 2, (y0 + y1) / 2])
+
+
+    def test_adjacent_core_electrodes_share_an_edge(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        canvas = self.app.manual_canvas
+        canvas.delete("all")
+
+        self.app._draw_cell((0, 0))
+        self.app._draw_cell((0, 1))
+        first, second = canvas.find_all()
+
+        self.assertAlmostEqual(canvas.coords(first)[2], canvas.coords(second)[0])
+
+
+    def test_manual_core_electrode_ids_fit_inside_their_cells(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        self.app._draw_matrix_canvas_one()
+        self.root.update_idletasks()
+        canvas = self.app.manual_canvas
+        text_items = {
+            int(canvas.itemcget(item, "text")): item
+            for item in canvas.find_all()
+            if canvas.type(item) == "text"
+            and canvas.itemcget(item, "text").isdigit()
+            and int(canvas.itemcget(item, "text")) <= 400
+        }
+
+        self.assertEqual(len(text_items), 400)
+        for eid, item in text_items.items():
+            row, col = divmod(eid - 1, self.app.cols)
+            x0, y0, x1, y1 = self.app._cell_rect((row, col))
+            tx0, ty0, tx1, ty1 = canvas.bbox(item)
+            self.assertGreaterEqual(tx0, x0 - 1)
+            self.assertGreaterEqual(ty0, y0 - 1)
+            self.assertLessEqual(tx1, x1 + 1)
+            self.assertLessEqual(ty1, y1 + 1)
+
+
+    def test_manual_reservoir_ids_fit_inside_their_label_areas(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        self.app._draw_matrix_canvas_one()
+        canvas = self.app.manual_canvas
+        text_items = {
+            int(canvas.itemcget(item, "text")): item
+            for item in canvas.find_all()
+            if canvas.type(item) == "text" and canvas.itemcget(item, "text").isdigit()
+        }
+
+        for eid in range(401, 421):
+            cell = cell_from_electrode_id(eid, self.app.cols)
+            x0, y0, x1, y1 = self.app._cell_text_rect(cell)
+            tx0, ty0, tx1, ty1 = canvas.bbox(text_items[eid])
+            self.assertGreaterEqual(tx0, x0 - 1)
+            self.assertGreaterEqual(ty0, y0 - 1)
+            self.assertLessEqual(tx1, x1 + 1)
+            self.assertLessEqual(ty1, y1 + 1)
+
+
+    def test_manual_reservoir_ids_use_high_contrast_text(self):
+        self.app.matrix_canvas = self.app.manual_canvas
+        self.app.manual_canvas.winfo_width = lambda: 650
+        self.app.manual_canvas.winfo_height = lambda: 600
+        self.app._draw_matrix_canvas_one()
+        canvas = self.app.manual_canvas
+
+        reservoir_items = [
+            item
+            for item in canvas.find_all()
+            if canvas.type(item) == "text"
+            and canvas.itemcget(item, "text").isdigit()
+            and 401 <= int(canvas.itemcget(item, "text")) <= 420
+        ]
+
+        self.assertEqual(len(reservoir_items), 20)
+        self.assertTrue(all(canvas.itemcget(item, "fill") == "white" for item in reservoir_items))
+
+
+    def test_camera_preview_resolves_layout_before_choosing_first_size(self):
+        widths = iter((1, 558))
+        heights = iter((1, 489))
+        original_width = self.app.camera_label.winfo_width
+        original_height = self.app.camera_label.winfo_height
+        self.app.camera_label.winfo_width = lambda: next(widths)
+        self.app.camera_label.winfo_height = lambda: next(heights)
+        try:
+            target = self.app._camera_preview_target_size()
+        finally:
+            self.app.camera_label.winfo_width = original_width
+            self.app.camera_label.winfo_height = original_height
+
+        self.assertEqual(target, (520, 489))
+
 
 
 if __name__ == "__main__":

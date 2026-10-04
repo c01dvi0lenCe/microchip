@@ -27,11 +27,12 @@ from controllers.camera_controller import CameraControllerMixin
 from controllers.arrival_confirmation import ArrivalConfirmationGate
 from controllers.electrode_transaction import ElectrodeTransactionClient
 from controllers.task_control import TaskControlMixin
-from controllers.scope_test_client import H4_PHASES, SCAN_TEST_FREQUENCIES_HZ, ScopeTestClient
-from controllers.scope_validation_controller import ScopeValidationControllerMixin
+from controllers.planning_job import PlanningJobRunner
+from controllers.experiment_controller import ExperimentControllerMixin
 
 
 class STM32MatrixController(
+    ExperimentControllerMixin,
     UiControllerMixin,
     SimulationControllerMixin,
     PersistenceControllerMixin,
@@ -42,7 +43,6 @@ class STM32MatrixController(
     MultiRuntimeMixin,
     ClosedLoopControllerMixin,
     CameraControllerMixin,
-    ScopeValidationControllerMixin,
 ):
     PRESET_SCHEMA = "dmf_visual_platform_settings"
     PRESET_VERSION = 1
@@ -69,6 +69,7 @@ class STM32MatrixController(
     TOOL_LOOP_SELECT = "选择循环液滴"
     TOOL_LOOP_PATH = "设置循环路径"
     TOOL_OBSTACLE = "设置障碍物"
+    TOOL_HARDWARE_OBSTACLE = "屏蔽故障电极"
     TOOL_MANUAL = "手动电极"
     MANUAL_TOOL_TOGGLE = "开关电极"
     MANUAL_TOOL_DROPLET = "设置液滴"
@@ -92,26 +93,19 @@ class STM32MatrixController(
             ack_timeout_s=0.45,
             max_retries=2,
         )
-        self.scope_test_client = ScopeTestClient(self._send_scope_test_line)
-        self.scope_test_running = False
 
         self.camera_running = False
         self.hardware_camera_adapter = None
         self.camera_thread = None
         self.camera_after_id = None
         self.auto_after_id = None
+        self.planning_poll_after_id = None
+        self.planning_jobs = PlanningJobRunner()
 
         self.mode_var = tk.StringVar(value="仿真")
         self.operation_var = tk.StringVar(value=self.OP_MOVE)
         self.tool_var = tk.StringVar(value=self.TOOL_MOVE_START)
         self.manual_tool_var = tk.StringVar(value=self.MANUAL_TOOL_TOGGLE)
-        self.scope_test_mode_var = tk.StringVar(value=self.SCOPE_MODE_OPTIONS[0])
-        self.scope_test_phase_var = tk.StringVar(value=H4_PHASES[0])
-        self.scope_test_row_var = tk.IntVar(value=1)
-        self.scope_test_col_var = tk.IntVar(value=1)
-        self.scope_test_row_b_var = tk.IntVar(value=1)
-        self.scope_test_col_b_var = tk.IntVar(value=2)
-        self.scope_test_frequency_var = tk.IntVar(value=SCAN_TEST_FREQUENCIES_HZ[-1])
         self.motion_profile_var = tk.StringVar(value="理想")
         self.vision_noise_var = tk.StringVar(value="关闭")
         self.fault_mode_var = tk.StringVar(value="无")
@@ -178,7 +172,7 @@ class STM32MatrixController(
         self.manual_after_id = None
         self.manual_last_update_time = time.monotonic()
 
-        self.sim_camera = SimulatedCamera(self.rows, self.cols, frame_size=(720, 720))
+        self.sim_camera = SimulatedCamera(self.rows, self.cols, frame_size=(520, 520))
         self.detector = DropletDetector(self.sim_camera)
         self.planner = AStarPlanner(
             self.rows,
@@ -270,13 +264,15 @@ class STM32MatrixController(
         self.buttons = {eid: {"state": 0, "hover": False} for eid in range(1, self.total_channels + 1)}
 
         self._configure_window()
+        self._init_experiment()
         self._build_ui()
         self.refresh_ports()
         self._set_connection_state(False)
         self._set_active_count(0)
         self._update_mode_ui()
-        self.root.after(25, lambda: self._render_sim_camera_frame(force_display=True))
+        self._render_sim_camera_frame(force_display=False)
         self._schedule_manual_simulation_loop()
+        self._schedule_planning_job_poll()
 
         self.recv_thread = threading.Thread(target=self.receive_data, daemon=True)
         self.recv_thread.start()

@@ -4,10 +4,9 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import cv2
-import numpy as np
 import yaml
 from dmf.vision.image_io import write_image
+from .overlay import render_overlay
 
 FRAME_COLUMNS=('experiment_id','frame_id','timestamp','timestamp_source','source_electrode','target_electrode',
     'centroid_x','centroid_y','droplet_area','eta_source','eta_target','distance_to_target','velocity',
@@ -50,16 +49,7 @@ class ExperimentLogger:
         if recording.get('raw'):images['raw']=packet.image_bgr
         if recording.get('mask') and result.mask is not None:images['mask']=result.mask
         if recording.get('overlay'):
-            overlay=packet.image_bgr.copy()
-            for electrode,color in [(source,(190,140,80)),(target,(50,150,230))]:
-                cv2.polylines(overlay,[np.rint(electrode_map[electrode].polygon_px).astype(np.int32)],True,color,1)
-            if result.mask is not None:
-                contours,_=cv2.findContours(result.mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-                cv2.drawContours(overlay,contours,-1,(220,120,50),1)
-                m=cv2.moments(result.mask,binaryImage=True)
-                if m['m00']:cv2.circle(overlay,(int(m['m10']/m['m00']),int(m['m01']/m['m00'])),3,(0,0,200),-1)
-            cv2.putText(overlay,f'{state} / {action}',(8,22),cv2.FONT_HERSHEY_SIMPLEX,.5,(50,50,200),1)
-            images['overlay']=overlay
+            images['overlay']=render_overlay(packet,result,electrode_map,source,target,state,action)
         for name,img in images.items():
             folder=self.root/name;folder.mkdir(exist_ok=True)
             if not write_image(folder/f'{packet.frame_id:06d}.png',img):raise OSError('image recording failed')

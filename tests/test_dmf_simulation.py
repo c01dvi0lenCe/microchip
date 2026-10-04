@@ -1,5 +1,8 @@
 import time
 import unittest
+from unittest.mock import patch
+
+import numpy as np
 
 from dmf_simulation import (
     AStarPlanner,
@@ -23,12 +26,35 @@ from dmf_simulation import (
     grid_polyline_cells,
     in_pull_risk_zone,
     is_reservoir_cell,
+    pull_risk_neighbors,
     schedule_multi_paths,
     target_merge_region_map,
 )
+from dmf.layout import DROPLET_DETECTION_RGB, DROPLET_DETECTION_TOLERANCE
 
 
 class DmfSimulationTests(unittest.TestCase):
+    def test_pull_risk_neighbor_lookup_matches_layout_rule(self):
+        for cell in LAYOUT_CELLS:
+            expected = frozenset(
+                other for other in LAYOUT_CELLS if in_pull_risk_zone(cell, other)
+            )
+            self.assertEqual(pull_risk_neighbors(cell), expected)
+
+    def test_droplet_color_mask_avoids_square_root_and_preserves_boundary(self):
+        base = np.array(DROPLET_DETECTION_RGB[0], dtype=np.uint8)
+        frame = np.empty((1, 2, 3), dtype=np.uint8)
+        frame[0, 0] = base
+        frame[0, 1] = base
+        frame[0, 0, 0] = int(base[0]) + DROPLET_DETECTION_TOLERANCE
+        frame[0, 1, 0] = int(base[0]) + DROPLET_DETECTION_TOLERANCE + 1
+
+        with patch("dmf.vision.simulation.np.sqrt", side_effect=AssertionError("square root should not be used")):
+            mask = DropletDetector._droplet_color_mask(frame)
+
+        self.assertTrue(mask[0, 0])
+        self.assertFalse(mask[0, 1])
+
     def test_electrode_id_mapping_is_row_major(self):
         self.assertEqual(electrode_id(0, 0), 1)
         self.assertEqual(electrode_id(0, 19), 20)
@@ -123,23 +149,6 @@ class DmfSimulationTests(unittest.TestCase):
         y = (y0 + y1) // 2
 
         self.assertEqual(tuple(int(channel) for channel in frame[y, x]), (182, 91, 77))
-
-    def test_camera_active_core_cell_uses_full_grid_cell_bounds(self):
-        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
-        left, top = camera.grid_origin_px
-        cell_size = camera.cell_size_px
-
-        bbox = camera._cell_bbox_px((5, 7))
-
-        self.assertEqual(
-            bbox,
-            (
-                int(round(left + 7 * cell_size)),
-                int(round(top + 5 * cell_size)),
-                int(round(left + 8 * cell_size)),
-                int(round(top + 6 * cell_size)),
-            ),
-        )
 
     def test_astar_returns_empty_when_no_path_exists(self):
         planner = AStarPlanner(rows=3, cols=3)
@@ -724,6 +733,24 @@ class DmfSimulationTests(unittest.TestCase):
         self.assertEqual(visits, [])
         self.assertIn((0, 1), schedules[0])
         self.assertIn((0, 1), schedules[1])
+
+    def test_camera_active_core_cell_uses_full_grid_cell_bounds(self):
+        camera = SimulatedCamera(rows=20, cols=20, frame_size=(640, 640))
+        left, top = camera.grid_origin_px
+        cell_size = camera.cell_size_px
+
+        bbox = camera._cell_bbox_px((5, 7))
+
+        self.assertEqual(
+            bbox,
+            (
+                int(round(left + 7 * cell_size)),
+                int(round(top + 5 * cell_size)),
+                int(round(left + 8 * cell_size)),
+                int(round(top + 6 * cell_size)),
+            ),
+        )
+
 
 
 if __name__ == "__main__":

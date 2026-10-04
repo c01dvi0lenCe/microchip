@@ -54,6 +54,8 @@ class TaskControlMixin:
         return f"闭环: {self.operation_var.get()}运行中"
 
     def start_auto_control(self):
+        if self._experiment_active:
+            return
         if not self.is_simulation_mode():
             messagebox.showinfo("提示", "第一版闭环演示仅在仿真模式运行")
             return
@@ -61,7 +63,15 @@ class TaskControlMixin:
             self.log("起点已在终点，无需启动闭环")
             return
 
+        if self.operation_var.get() == self.OP_MULTI:
+            self.request_plan_path(reset_droplet=True, on_complete=self._start_auto_with_planned)
+            return
         planned = self.plan_path(reset_droplet=True)
+        self._start_auto_with_planned(planned)
+
+    def _start_auto_with_planned(self, planned):
+        if self._experiment_active:
+            return
         if not self._operation_ready_to_start(planned):
             return
 
@@ -112,6 +122,8 @@ class TaskControlMixin:
         self._draw_matrix_canvas()
 
     def reset_simulation(self):
+        if not self.is_simulation_mode():
+            return
         self.stop_auto_control("复位仿真")
         self._clear_planned_operation()
         self.detected_position = None
@@ -428,12 +440,16 @@ class TaskControlMixin:
         return cell in CORE_CELLS
 
     def simulate_detection_dropout(self):
+        if not self.is_simulation_mode():
+            return
         self.drop_frame_until = time.monotonic() + 0.8
         self.log("已触发 0.8 s 检测丢帧测试")
         if self.is_simulation_mode() and not self.auto_running:
             self._render_sim_camera_frame(hide_droplet=True)
 
     def simulate_drift_fault(self):
+        if not self.is_simulation_mode():
+            return
         if self.operation_var.get() == self.OP_MULTI and self.sim_droplets:
             for idx, visible in enumerate(self.multi_droplet_visible):
                 if not visible:
@@ -449,6 +465,8 @@ class TaskControlMixin:
         self._render_sim_camera_frame()
 
     def simulate_fusion_fault(self):
+        if not self.is_simulation_mode():
+            return
         if self.operation_var.get() != self.OP_MULTI:
             self.log("融合测试仅用于多液滴模式")
             return
@@ -462,6 +480,8 @@ class TaskControlMixin:
         self._render_sim_camera_frame()
 
     def simulate_split_failure_fault(self):
+        if not self.is_simulation_mode():
+            return
         if self.operation_var.get() != self.OP_SPLIT:
             self.log("分裂失败测试仅用于分裂模式")
             return

@@ -2,7 +2,25 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..layout import Cell, GRID_COLS, GRID_ROWS, are_touching, is_core_cell
+from ..layout import Cell, GRID_COLS, GRID_ROWS, LAYOUT_CELLS, are_touching, is_core_cell
+
+
+_LAYOUT_CELL_SET = frozenset(LAYOUT_CELLS)
+_EMPTY_CELL_SET: frozenset[Cell] = frozenset()
+_PULL_RISK_NEIGHBORS = {
+    cell: frozenset(
+        (cell[0] + row_delta, cell[1] + col_delta)
+        for row_delta in (-1, 0, 1)
+        for col_delta in (-1, 0, 1)
+        if (cell[0] + row_delta, cell[1] + col_delta) in _LAYOUT_CELL_SET
+    )
+    for cell in LAYOUT_CELLS
+}
+
+
+def pull_risk_neighbors(cell: Cell) -> frozenset[Cell]:
+    """Return valid layout cells within the electrical pull-risk radius."""
+    return _PULL_RISK_NEIGHBORS.get(cell, _EMPTY_CELL_SET)
 
 
 def grid_polyline_cells(points: Iterable[Cell], rows: int = GRID_ROWS, cols: int = GRID_COLS) -> list[Cell]:
