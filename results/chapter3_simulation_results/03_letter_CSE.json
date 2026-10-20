@@ -1,0 +1,2208 @@
+{
+  "scenario": "letter_CSE",
+  "simulation_only": true,
+  "preset": "presets/CSE写字母.json",
+  "sources": [
+    [
+      -3,
+      6
+    ],
+    [
+      -3,
+      13
+    ],
+    [
+      6,
+      -3
+    ],
+    [
+      6,
+      22
+    ],
+    [
+      13,
+      -3
+    ],
+    [
+      13,
+      22
+    ],
+    [
+      22,
+      6
+    ],
+    [
+      22,
+      13
+    ]
+  ],
+  "targets": [
+    [
+      5,
+      1
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      5,
+      5
+    ],
+    [
+      5,
+      7
+    ],
+    [
+      5,
+      9
+    ],
+    [
+      5,
+      11
+    ],
+    [
+      5,
+      14
+    ],
+    [
+      5,
+      16
+    ],
+    [
+      5,
+      18
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      7,
+      7
+    ],
+    [
+      7,
+      14
+    ],
+    [
+      9,
+      1
+    ],
+    [
+      9,
+      7
+    ],
+    [
+      9,
+      9
+    ],
+    [
+      9,
+      11
+    ],
+    [
+      9,
+      14
+    ],
+    [
+      9,
+      16
+    ],
+    [
+      9,
+      18
+    ],
+    [
+      11,
+      1
+    ],
+    [
+      11,
+      11
+    ],
+    [
+      11,
+      14
+    ],
+    [
+      13,
+      1
+    ],
+    [
+      13,
+      3
+    ],
+    [
+      13,
+      5
+    ],
+    [
+      13,
+      7
+    ],
+    [
+      13,
+      9
+    ],
+    [
+      13,
+      11
+    ],
+    [
+      13,
+      14
+    ],
+    [
+      13,
+      16
+    ],
+    [
+      13,
+      18
+    ]
+  ],
+  "droplet_count": 31,
+  "reservoir_count": 8,
+  "color_semantics": "One fixed color per source reservoir; all droplets released from that reservoir share its color. Droplet IDs remain unique.",
+  "source_color_groups": [
+    {
+      "source_cell": [
+        -3,
+        6
+      ],
+      "source_electrode": "402",
+      "color": "#1852C2",
+      "droplet_ids": [
+        1,
+        10,
+        18,
+        27,
+        31
+      ]
+    },
+    {
+      "source_cell": [
+        -3,
+        13
+      ],
+      "source_electrode": "404",
+      "color": "#B23A48",
+      "droplet_ids": [
+        2,
+        11,
+        17,
+        30
+      ]
+    },
+    {
+      "source_cell": [
+        6,
+        22
+      ],
+      "source_electrode": "406",
+      "color": "#7651A8",
+      "droplet_ids": [
+        5,
+        9,
+        23
+      ]
+    },
+    {
+      "source_cell": [
+        13,
+        22
+      ],
+      "source_electrode": "408",
+      "color": "#007B83",
+      "droplet_ids": [
+        3,
+        12,
+        24,
+        28
+      ]
+    },
+    {
+      "source_cell": [
+        22,
+        13
+      ],
+      "source_electrode": "410",
+      "color": "#B87412",
+      "droplet_ids": [
+        7,
+        14,
+        19
+      ]
+    },
+    {
+      "source_cell": [
+        22,
+        6
+      ],
+      "source_electrode": "412",
+      "color": "#4E7A2E",
+      "droplet_ids": [
+        6,
+        16,
+        21,
+        26,
+        29
+      ]
+    },
+    {
+      "source_cell": [
+        13,
+        -3
+      ],
+      "source_electrode": "414",
+      "color": "#2F5F9A",
+      "droplet_ids": [
+        8,
+        15,
+        20,
+        25
+      ]
+    },
+    {
+      "source_cell": [
+        6,
+        -3
+      ],
+      "source_electrode": "416",
+      "color": "#7D4F2A",
+      "droplet_ids": [
+        4,
+        13,
+        22
+      ]
+    }
+  ],
+  "total_spatial_path_length": 335,
+  "scheduled_makespan_steps": 28,
+  "wait_steps_total": 91,
+  "schedule_source": "build_multi_droplet_assignments; scheduled paths are exported unchanged",
+  "initial_released_droplet_count": 8,
+  "schedule_conflict_count": 0,
+  "schedule_conflict_validation": "passed",
+  "release_delay_steps_by_droplet": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 1,
+    "10": 1,
+    "11": 1,
+    "12": 1,
+    "13": 1,
+    "14": 1,
+    "15": 1,
+    "16": 1,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 5,
+    "23": 5,
+    "24": 5,
+    "25": 7,
+    "26": 7,
+    "27": 7,
+    "28": 9,
+    "29": 10,
+    "30": 7,
+    "31": 10
+  },
+  "snapshot_global_schedule_steps": [
+    0,
+    9,
+    19,
+    28
+  ],
+  "snapshot_semantics": "All panels are synchronized global schedule steps. Each droplet position and its single direction arrow are read from the production reservation schedule; queued droplets are omitted.",
+  "snapshot_schedule_indices_by_droplet": [
+    {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0,
+      "13": 0,
+      "14": 0,
+      "15": 0,
+      "16": 0,
+      "17": 0,
+      "18": 0,
+      "19": 0,
+      "20": 0,
+      "21": 0,
+      "22": 0,
+      "23": 0,
+      "24": 0,
+      "25": 0,
+      "26": 0,
+      "27": 0,
+      "28": 0,
+      "29": 0,
+      "30": 0,
+      "31": 0
+    },
+    {
+      "1": 9,
+      "2": 9,
+      "3": 9,
+      "4": 9,
+      "5": 9,
+      "6": 9,
+      "7": 9,
+      "8": 9,
+      "9": 9,
+      "10": 9,
+      "11": 9,
+      "12": 9,
+      "13": 9,
+      "14": 9,
+      "15": 9,
+      "16": 9,
+      "17": 9,
+      "18": 9,
+      "19": 9,
+      "20": 9,
+      "21": 9,
+      "22": 9,
+      "23": 9,
+      "24": 9,
+      "25": 9,
+      "26": 9,
+      "27": 9,
+      "28": 9,
+      "29": 9,
+      "30": 9,
+      "31": 9
+    },
+    {
+      "1": 19,
+      "2": 19,
+      "3": 19,
+      "4": 19,
+      "5": 19,
+      "6": 19,
+      "7": 19,
+      "8": 19,
+      "9": 19,
+      "10": 19,
+      "11": 19,
+      "12": 19,
+      "13": 19,
+      "14": 19,
+      "15": 19,
+      "16": 19,
+      "17": 19,
+      "18": 19,
+      "19": 19,
+      "20": 19,
+      "21": 19,
+      "22": 19,
+      "23": 19,
+      "24": 19,
+      "25": 19,
+      "26": 19,
+      "27": 19,
+      "28": 19,
+      "29": 19,
+      "30": 19,
+      "31": 19
+    },
+    {
+      "1": 28,
+      "2": 28,
+      "3": 28,
+      "4": 28,
+      "5": 28,
+      "6": 28,
+      "7": 28,
+      "8": 28,
+      "9": 28,
+      "10": 28,
+      "11": 28,
+      "12": 28,
+      "13": 28,
+      "14": 28,
+      "15": 28,
+      "16": 28,
+      "17": 28,
+      "18": 28,
+      "19": 28,
+      "20": 28,
+      "21": 28,
+      "22": 28,
+      "23": 28,
+      "24": 28,
+      "25": 28,
+      "26": 28,
+      "27": 28,
+      "28": 28,
+      "29": 28,
+      "30": 28,
+      "31": 28
+    }
+  ],
+  "snapshot_actions": [
+    {
+      "global_schedule_step": 0,
+      "droplets": [
+        {
+          "droplet_id": 1,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            -3,
+            6
+          ],
+          "next_cell": [
+            -1,
+            6
+          ]
+        },
+        {
+          "droplet_id": 2,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            -3,
+            13
+          ],
+          "next_cell": [
+            -1,
+            13
+          ]
+        },
+        {
+          "droplet_id": 3,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            13,
+            22
+          ],
+          "next_cell": [
+            13,
+            20
+          ]
+        },
+        {
+          "droplet_id": 4,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            6,
+            -3
+          ],
+          "next_cell": [
+            6,
+            -1
+          ]
+        },
+        {
+          "droplet_id": 5,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            6,
+            22
+          ],
+          "next_cell": [
+            6,
+            20
+          ]
+        },
+        {
+          "droplet_id": 6,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            22,
+            6
+          ],
+          "next_cell": [
+            20,
+            6
+          ]
+        },
+        {
+          "droplet_id": 7,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            22,
+            13
+          ],
+          "next_cell": [
+            20,
+            13
+          ]
+        },
+        {
+          "droplet_id": 8,
+          "schedule_index": 0,
+          "action": "dispensing",
+          "current_cell": [
+            13,
+            -3
+          ],
+          "next_cell": [
+            13,
+            -1
+          ]
+        }
+      ]
+    },
+    {
+      "global_schedule_step": 9,
+      "droplets": [
+        {
+          "droplet_id": 1,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            7,
+            6
+          ],
+          "next_cell": [
+            8,
+            6
+          ]
+        },
+        {
+          "droplet_id": 2,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            7,
+            13
+          ],
+          "next_cell": [
+            8,
+            13
+          ]
+        },
+        {
+          "droplet_id": 3,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            11,
+            14
+          ],
+          "next_cell": [
+            11,
+            13
+          ]
+        },
+        {
+          "droplet_id": 4,
+          "schedule_index": 9,
+          "action": "wait",
+          "current_cell": [
+            9,
+            4
+          ],
+          "next_cell": [
+            9,
+            4
+          ]
+        },
+        {
+          "droplet_id": 5,
+          "schedule_index": 9,
+          "action": "wait",
+          "current_cell": [
+            7,
+            15
+          ],
+          "next_cell": [
+            7,
+            15
+          ]
+        },
+        {
+          "droplet_id": 6,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            13,
+            7
+          ],
+          "next_cell": [
+            13,
+            8
+          ]
+        },
+        {
+          "droplet_id": 7,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            13,
+            12
+          ],
+          "next_cell": [
+            13,
+            11
+          ]
+        },
+        {
+          "droplet_id": 8,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            13,
+            4
+          ],
+          "next_cell": [
+            13,
+            5
+          ]
+        },
+        {
+          "droplet_id": 9,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            9,
+            19
+          ],
+          "next_cell": [
+            9,
+            18
+          ]
+        },
+        {
+          "droplet_id": 10,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            4,
+            6
+          ],
+          "next_cell": [
+            5,
+            6
+          ]
+        },
+        {
+          "droplet_id": 11,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            4,
+            13
+          ],
+          "next_cell": [
+            5,
+            13
+          ]
+        },
+        {
+          "droplet_id": 12,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            11,
+            18
+          ],
+          "next_cell": [
+            11,
+            17
+          ]
+        },
+        {
+          "droplet_id": 13,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            5,
+            2
+          ],
+          "next_cell": [
+            5,
+            3
+          ]
+        },
+        {
+          "droplet_id": 14,
+          "schedule_index": 9,
+          "action": "wait",
+          "current_cell": [
+            15,
+            13
+          ],
+          "next_cell": [
+            15,
+            13
+          ]
+        },
+        {
+          "droplet_id": 15,
+          "schedule_index": 9,
+          "action": "wait",
+          "current_cell": [
+            13,
+            2
+          ],
+          "next_cell": [
+            13,
+            2
+          ]
+        },
+        {
+          "droplet_id": 16,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            15,
+            6
+          ],
+          "next_cell": [
+            15,
+            7
+          ]
+        },
+        {
+          "droplet_id": 17,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            1,
+            13
+          ],
+          "next_cell": [
+            2,
+            13
+          ]
+        },
+        {
+          "droplet_id": 18,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            1,
+            6
+          ],
+          "next_cell": [
+            2,
+            6
+          ]
+        },
+        {
+          "droplet_id": 19,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            18,
+            13
+          ],
+          "next_cell": [
+            17,
+            13
+          ]
+        },
+        {
+          "droplet_id": 20,
+          "schedule_index": 9,
+          "action": "wait",
+          "current_cell": [
+            13,
+            0
+          ],
+          "next_cell": [
+            13,
+            0
+          ]
+        },
+        {
+          "droplet_id": 21,
+          "schedule_index": 9,
+          "action": "move",
+          "current_cell": [
+            18,
+            6
+          ],
+          "next_cell": [
+            17,
+            6
+          ]
+        },
+        {
+          "droplet_id": 22,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            6,
+            -1
+          ],
+          "next_cell": [
+            6,
+            0
+          ]
+        },
+        {
+          "droplet_id": 23,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            6,
+            20
+          ],
+          "next_cell": [
+            6,
+            19
+          ]
+        },
+        {
+          "droplet_id": 24,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            13,
+            20
+          ],
+          "next_cell": [
+            13,
+            19
+          ]
+        },
+        {
+          "droplet_id": 25,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            13,
+            -3
+          ],
+          "next_cell": [
+            13,
+            -3
+          ]
+        },
+        {
+          "droplet_id": 26,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            22,
+            6
+          ],
+          "next_cell": [
+            20,
+            6
+          ]
+        },
+        {
+          "droplet_id": 27,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            -3,
+            6
+          ],
+          "next_cell": [
+            -1,
+            6
+          ]
+        },
+        {
+          "droplet_id": 28,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            13,
+            22
+          ],
+          "next_cell": [
+            13,
+            22
+          ]
+        },
+        {
+          "droplet_id": 30,
+          "schedule_index": 9,
+          "action": "dispensing",
+          "current_cell": [
+            -3,
+            13
+          ],
+          "next_cell": [
+            -1,
+            13
+          ]
+        }
+      ]
+    },
+    {
+      "global_schedule_step": 19,
+      "droplets": [
+        {
+          "droplet_id": 1,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            9
+          ],
+          "next_cell": [
+            9,
+            9
+          ]
+        },
+        {
+          "droplet_id": 2,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            11
+          ],
+          "next_cell": [
+            9,
+            11
+          ]
+        },
+        {
+          "droplet_id": 3,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            11,
+            11
+          ],
+          "next_cell": [
+            11,
+            11
+          ]
+        },
+        {
+          "droplet_id": 4,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            7
+          ],
+          "next_cell": [
+            9,
+            7
+          ]
+        },
+        {
+          "droplet_id": 5,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            7,
+            7
+          ],
+          "next_cell": [
+            7,
+            7
+          ]
+        },
+        {
+          "droplet_id": 6,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            9
+          ],
+          "next_cell": [
+            13,
+            9
+          ]
+        },
+        {
+          "droplet_id": 7,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            11
+          ],
+          "next_cell": [
+            13,
+            11
+          ]
+        },
+        {
+          "droplet_id": 8,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            7
+          ],
+          "next_cell": [
+            13,
+            7
+          ]
+        },
+        {
+          "droplet_id": 9,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            14
+          ],
+          "next_cell": [
+            9,
+            14
+          ]
+        },
+        {
+          "droplet_id": 10,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            9
+          ],
+          "next_cell": [
+            5,
+            9
+          ]
+        },
+        {
+          "droplet_id": 11,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            11
+          ],
+          "next_cell": [
+            5,
+            11
+          ]
+        },
+        {
+          "droplet_id": 12,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            11,
+            14
+          ],
+          "next_cell": [
+            11,
+            14
+          ]
+        },
+        {
+          "droplet_id": 13,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            7
+          ],
+          "next_cell": [
+            5,
+            7
+          ]
+        },
+        {
+          "droplet_id": 14,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            9,
+            16
+          ],
+          "next_cell": [
+            8,
+            16
+          ]
+        },
+        {
+          "droplet_id": 15,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            5
+          ],
+          "next_cell": [
+            13,
+            5
+          ]
+        },
+        {
+          "droplet_id": 16,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            14
+          ],
+          "next_cell": [
+            13,
+            14
+          ]
+        },
+        {
+          "droplet_id": 17,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            14
+          ],
+          "next_cell": [
+            5,
+            14
+          ]
+        },
+        {
+          "droplet_id": 18,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            5
+          ],
+          "next_cell": [
+            5,
+            5
+          ]
+        },
+        {
+          "droplet_id": 19,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            12,
+            16
+          ],
+          "next_cell": [
+            11,
+            16
+          ]
+        },
+        {
+          "droplet_id": 20,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            3
+          ],
+          "next_cell": [
+            13,
+            3
+          ]
+        },
+        {
+          "droplet_id": 21,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            15,
+            12
+          ],
+          "next_cell": [
+            15,
+            13
+          ]
+        },
+        {
+          "droplet_id": 22,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            3
+          ],
+          "next_cell": [
+            5,
+            3
+          ]
+        },
+        {
+          "droplet_id": 23,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            16
+          ],
+          "next_cell": [
+            5,
+            16
+          ]
+        },
+        {
+          "droplet_id": 24,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            18
+          ],
+          "next_cell": [
+            9,
+            18
+          ]
+        },
+        {
+          "droplet_id": 25,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            1
+          ],
+          "next_cell": [
+            9,
+            1
+          ]
+        },
+        {
+          "droplet_id": 26,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            15,
+            4
+          ],
+          "next_cell": [
+            15,
+            3
+          ]
+        },
+        {
+          "droplet_id": 27,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            3,
+            4
+          ],
+          "next_cell": [
+            3,
+            3
+          ]
+        },
+        {
+          "droplet_id": 28,
+          "schedule_index": 19,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            18
+          ],
+          "next_cell": [
+            13,
+            18
+          ]
+        },
+        {
+          "droplet_id": 29,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            17,
+            6
+          ],
+          "next_cell": [
+            16,
+            6
+          ]
+        },
+        {
+          "droplet_id": 30,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            3,
+            17
+          ],
+          "next_cell": [
+            3,
+            18
+          ]
+        },
+        {
+          "droplet_id": 31,
+          "schedule_index": 19,
+          "action": "move",
+          "current_cell": [
+            1,
+            6
+          ],
+          "next_cell": [
+            2,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "global_schedule_step": 28,
+      "droplets": [
+        {
+          "droplet_id": 1,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            9
+          ],
+          "next_cell": [
+            9,
+            9
+          ]
+        },
+        {
+          "droplet_id": 2,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            11
+          ],
+          "next_cell": [
+            9,
+            11
+          ]
+        },
+        {
+          "droplet_id": 3,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            11,
+            11
+          ],
+          "next_cell": [
+            11,
+            11
+          ]
+        },
+        {
+          "droplet_id": 4,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            7
+          ],
+          "next_cell": [
+            9,
+            7
+          ]
+        },
+        {
+          "droplet_id": 5,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            7,
+            7
+          ],
+          "next_cell": [
+            7,
+            7
+          ]
+        },
+        {
+          "droplet_id": 6,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            9
+          ],
+          "next_cell": [
+            13,
+            9
+          ]
+        },
+        {
+          "droplet_id": 7,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            11
+          ],
+          "next_cell": [
+            13,
+            11
+          ]
+        },
+        {
+          "droplet_id": 8,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            7
+          ],
+          "next_cell": [
+            13,
+            7
+          ]
+        },
+        {
+          "droplet_id": 9,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            14
+          ],
+          "next_cell": [
+            9,
+            14
+          ]
+        },
+        {
+          "droplet_id": 10,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            9
+          ],
+          "next_cell": [
+            5,
+            9
+          ]
+        },
+        {
+          "droplet_id": 11,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            11
+          ],
+          "next_cell": [
+            5,
+            11
+          ]
+        },
+        {
+          "droplet_id": 12,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            11,
+            14
+          ],
+          "next_cell": [
+            11,
+            14
+          ]
+        },
+        {
+          "droplet_id": 13,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            7
+          ],
+          "next_cell": [
+            5,
+            7
+          ]
+        },
+        {
+          "droplet_id": 14,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            7,
+            14
+          ],
+          "next_cell": [
+            7,
+            14
+          ]
+        },
+        {
+          "droplet_id": 15,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            5
+          ],
+          "next_cell": [
+            13,
+            5
+          ]
+        },
+        {
+          "droplet_id": 16,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            14
+          ],
+          "next_cell": [
+            13,
+            14
+          ]
+        },
+        {
+          "droplet_id": 17,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            14
+          ],
+          "next_cell": [
+            5,
+            14
+          ]
+        },
+        {
+          "droplet_id": 18,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            5
+          ],
+          "next_cell": [
+            5,
+            5
+          ]
+        },
+        {
+          "droplet_id": 19,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            16
+          ],
+          "next_cell": [
+            9,
+            16
+          ]
+        },
+        {
+          "droplet_id": 20,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            3
+          ],
+          "next_cell": [
+            13,
+            3
+          ]
+        },
+        {
+          "droplet_id": 21,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            16
+          ],
+          "next_cell": [
+            13,
+            16
+          ]
+        },
+        {
+          "droplet_id": 22,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            3
+          ],
+          "next_cell": [
+            5,
+            3
+          ]
+        },
+        {
+          "droplet_id": 23,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            16
+          ],
+          "next_cell": [
+            5,
+            16
+          ]
+        },
+        {
+          "droplet_id": 24,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            18
+          ],
+          "next_cell": [
+            9,
+            18
+          ]
+        },
+        {
+          "droplet_id": 25,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            9,
+            1
+          ],
+          "next_cell": [
+            9,
+            1
+          ]
+        },
+        {
+          "droplet_id": 26,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            11,
+            1
+          ],
+          "next_cell": [
+            11,
+            1
+          ]
+        },
+        {
+          "droplet_id": 27,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            7,
+            1
+          ],
+          "next_cell": [
+            7,
+            1
+          ]
+        },
+        {
+          "droplet_id": 28,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            18
+          ],
+          "next_cell": [
+            13,
+            18
+          ]
+        },
+        {
+          "droplet_id": 29,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            13,
+            1
+          ],
+          "next_cell": [
+            13,
+            1
+          ]
+        },
+        {
+          "droplet_id": 30,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            18
+          ],
+          "next_cell": [
+            5,
+            18
+          ]
+        },
+        {
+          "droplet_id": 31,
+          "schedule_index": 28,
+          "action": "arrived",
+          "current_cell": [
+            5,
+            1
+          ],
+          "next_cell": [
+            5,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "final_status": "completed",
+  "assignments": [
+    {
+      "droplet_id": 1,
+      "source_cell": "[-3, 6]",
+      "source_electrode": "402",
+      "target_cell": "[9, 9]",
+      "target_electrode": "190",
+      "static_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [9, 7], [9, 8], [9, 9]]",
+      "static_path_electrodes": "402 401 7 27 47 67 87 107 127 147 167 187 188 189 190",
+      "scheduled_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [9, 7], [9, 8], [9, 9]]",
+      "scheduled_path_electrodes": "402 401 7 27 47 67 87 107 127 147 167 187 188 189 190",
+      "path_length_steps": 14,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 2,
+      "source_cell": "[-3, 13]",
+      "source_electrode": "404",
+      "target_cell": "[9, 11]",
+      "target_electrode": "192",
+      "static_path_cells": "[[-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [5, 13], [6, 13], [7, 13], [8, 13], [9, 13], [9, 12], [9, 11]]",
+      "static_path_electrodes": "404 403 14 34 54 74 94 114 134 154 174 194 193 192",
+      "scheduled_path_cells": "[[-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [5, 13], [6, 13], [7, 13], [8, 13], [9, 13], [9, 12], [9, 11]]",
+      "scheduled_path_electrodes": "404 403 14 34 54 74 94 114 134 154 174 194 193 192",
+      "path_length_steps": 13,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 3,
+      "source_cell": "[13, 22]",
+      "source_electrode": "408",
+      "target_cell": "[11, 11]",
+      "target_electrode": "232",
+      "static_path_cells": "[[13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [11, 18], [11, 17], [11, 16], [11, 15], [11, 14], [11, 13], [11, 12], [11, 11]]",
+      "static_path_electrodes": "408 407 280 260 240 239 238 237 236 235 234 233 232",
+      "scheduled_path_cells": "[[13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [11, 18], [11, 17], [11, 16], [11, 15], [11, 14], [11, 13], [11, 12], [11, 11]]",
+      "scheduled_path_electrodes": "408 407 280 260 240 239 238 237 236 235 234 233 232",
+      "path_length_steps": 12,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 4,
+      "source_cell": "[6, -3]",
+      "source_electrode": "416",
+      "target_cell": "[9, 7]",
+      "target_electrode": "188",
+      "static_path_cells": "[[6, -3], [6, -1], [6, 0], [7, 0], [8, 0], [9, 0], [9, 1], [9, 2], [9, 3], [9, 4], [9, 5], [9, 6], [9, 7]]",
+      "static_path_electrodes": "416 415 121 141 161 181 182 183 184 185 186 187 188",
+      "scheduled_path_cells": "[[6, -3], [6, -1], [6, 0], [7, 0], [8, 0], [9, 0], [9, 1], [9, 2], [9, 3], [9, 4], [9, 4], [9, 4], [9, 4], [9, 5], [9, 6], [9, 7]]",
+      "scheduled_path_electrodes": "416 415 121 141 161 181 182 183 184 185 185 185 185 186 187 188",
+      "path_length_steps": 12,
+      "wait_steps": 3,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 5,
+      "source_cell": "[6, 22]",
+      "source_electrode": "406",
+      "target_cell": "[7, 7]",
+      "target_electrode": "148",
+      "static_path_cells": "[[6, 22], [6, 20], [6, 19], [7, 19], [7, 18], [7, 17], [7, 16], [7, 15], [7, 14], [7, 13], [7, 12], [7, 11], [7, 10], [7, 9], [7, 8], [7, 7]]",
+      "static_path_electrodes": "406 405 140 160 159 158 157 156 155 154 153 152 151 150 149 148",
+      "scheduled_path_cells": "[[6, 22], [6, 20], [6, 19], [7, 19], [7, 18], [7, 17], [7, 16], [7, 15], [7, 15], [7, 15], [7, 15], [7, 15], [7, 14], [7, 13], [7, 12], [7, 11], [7, 10], [7, 9], [7, 8], [7, 7]]",
+      "scheduled_path_electrodes": "406 405 140 160 159 158 157 156 156 156 156 156 155 154 153 152 151 150 149 148",
+      "path_length_steps": 15,
+      "wait_steps": 4,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 6,
+      "source_cell": "[22, 6]",
+      "source_electrode": "412",
+      "target_cell": "[13, 9]",
+      "target_electrode": "270",
+      "static_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [14, 6], [13, 6], [13, 7], [13, 8], [13, 9]]",
+      "static_path_electrodes": "412 411 387 367 347 327 307 287 267 268 269 270",
+      "scheduled_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [14, 6], [13, 6], [13, 7], [13, 8], [13, 9]]",
+      "scheduled_path_electrodes": "412 411 387 367 347 327 307 287 267 268 269 270",
+      "path_length_steps": 11,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 7,
+      "source_cell": "[22, 13]",
+      "source_electrode": "410",
+      "target_cell": "[13, 11]",
+      "target_electrode": "272",
+      "static_path_cells": "[[22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [16, 13], [15, 13], [14, 13], [13, 13], [13, 12], [13, 11]]",
+      "static_path_electrodes": "410 409 394 374 354 334 314 294 274 273 272",
+      "scheduled_path_cells": "[[22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [16, 13], [15, 13], [14, 13], [13, 13], [13, 12], [13, 11]]",
+      "scheduled_path_electrodes": "410 409 394 374 354 334 314 294 274 273 272",
+      "path_length_steps": 10,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 8,
+      "source_cell": "[13, -3]",
+      "source_electrode": "414",
+      "target_cell": "[13, 7]",
+      "target_electrode": "268",
+      "static_path_cells": "[[13, -3], [13, -1], [13, 0], [13, 1], [13, 2], [13, 3], [13, 4], [13, 5], [13, 6], [13, 7]]",
+      "static_path_electrodes": "414 413 261 262 263 264 265 266 267 268",
+      "scheduled_path_cells": "[[13, -3], [13, -1], [13, 0], [13, 1], [13, 2], [13, 3], [13, 4], [13, 4], [13, 4], [13, 4], [13, 5], [13, 6], [13, 7]]",
+      "scheduled_path_electrodes": "414 413 261 262 263 264 265 265 265 265 266 267 268",
+      "path_length_steps": 9,
+      "wait_steps": 3,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 9,
+      "source_cell": "[6, 22]",
+      "source_electrode": "406",
+      "target_cell": "[9, 14]",
+      "target_electrode": "195",
+      "static_path_cells": "[[6, 22], [6, 20], [6, 19], [7, 19], [8, 19], [9, 19], [9, 18], [9, 17], [9, 16], [9, 15], [9, 14]]",
+      "static_path_electrodes": "406 405 140 160 180 200 199 198 197 196 195",
+      "scheduled_path_cells": "[null, [6, 22], [6, 22], [6, 22], [6, 22], [6, 20], [6, 19], [7, 19], [8, 19], [9, 19], [9, 18], [9, 17], [9, 16], [9, 15], [9, 14]]",
+      "scheduled_path_electrodes": "- 406 406 406 406 405 140 160 180 200 199 198 197 196 195",
+      "path_length_steps": 10,
+      "wait_steps": 3,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 10,
+      "source_cell": "[-3, 6]",
+      "source_electrode": "402",
+      "target_cell": "[5, 9]",
+      "target_electrode": "110",
+      "static_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [5, 7], [5, 8], [5, 9]]",
+      "static_path_electrodes": "402 401 7 27 47 67 87 107 108 109 110",
+      "scheduled_path_cells": "[null, [-3, 6], [-3, 6], [-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [5, 7], [5, 8], [5, 9]]",
+      "scheduled_path_electrodes": "- 402 402 402 401 7 27 47 67 87 107 108 109 110",
+      "path_length_steps": 10,
+      "wait_steps": 2,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 11,
+      "source_cell": "[-3, 13]",
+      "source_electrode": "404",
+      "target_cell": "[5, 11]",
+      "target_electrode": "112",
+      "static_path_cells": "[[-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [5, 13], [5, 12], [5, 11]]",
+      "static_path_electrodes": "404 403 14 34 54 74 94 114 113 112",
+      "scheduled_path_cells": "[null, [-3, 13], [-3, 13], [-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [5, 13], [5, 12], [5, 11]]",
+      "scheduled_path_electrodes": "- 404 404 404 403 14 34 54 74 94 114 113 112",
+      "path_length_steps": 9,
+      "wait_steps": 2,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 12,
+      "source_cell": "[13, 22]",
+      "source_electrode": "408",
+      "target_cell": "[11, 14]",
+      "target_electrode": "235",
+      "static_path_cells": "[[13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [11, 18], [11, 17], [11, 16], [11, 15], [11, 14]]",
+      "static_path_electrodes": "408 407 280 260 240 239 238 237 236 235",
+      "scheduled_path_cells": "[null, [13, 22], [13, 22], [13, 22], [13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [11, 18], [11, 17], [11, 16], [11, 15], [11, 14]]",
+      "scheduled_path_electrodes": "- 408 408 408 408 407 280 260 240 239 238 237 236 235",
+      "path_length_steps": 9,
+      "wait_steps": 3,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 13,
+      "source_cell": "[6, -3]",
+      "source_electrode": "416",
+      "target_cell": "[5, 7]",
+      "target_electrode": "108",
+      "static_path_cells": "[[6, -3], [6, -1], [6, 0], [5, 0], [5, 1], [5, 2], [5, 3], [5, 4], [5, 5], [5, 6], [5, 7]]",
+      "static_path_electrodes": "416 415 121 101 102 103 104 105 106 107 108",
+      "scheduled_path_cells": "[null, [6, -3], [6, -3], [6, -3], [6, -3], [6, -1], [6, 0], [5, 0], [5, 1], [5, 2], [5, 3], [5, 4], [5, 5], [5, 6], [5, 7]]",
+      "scheduled_path_electrodes": "- 416 416 416 416 415 121 101 102 103 104 105 106 107 108",
+      "path_length_steps": 10,
+      "wait_steps": 3,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 14,
+      "source_cell": "[22, 13]",
+      "source_electrode": "410",
+      "target_cell": "[7, 14]",
+      "target_electrode": "155",
+      "static_path_cells": "[[22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [16, 13], [15, 13], [14, 13], [13, 13], [13, 14], [13, 15], [13, 16], [12, 16], [11, 16], [10, 16], [9, 16], [8, 16], [7, 16], [7, 15], [7, 14]]",
+      "static_path_electrodes": "410 409 394 374 354 334 314 294 274 275 276 277 257 237 217 197 177 157 156 155",
+      "scheduled_path_cells": "[null, [22, 13], [22, 13], [22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [16, 13], [15, 13], [15, 13], [14, 13], [13, 13], [13, 14], [13, 15], [13, 16], [12, 16], [11, 16], [10, 16], [9, 16], [8, 16], [7, 16], [7, 15], [7, 14]]",
+      "scheduled_path_electrodes": "- 410 410 410 409 394 374 354 334 314 314 294 274 275 276 277 257 237 217 197 177 157 156 155",
+      "path_length_steps": 19,
+      "wait_steps": 3,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 15,
+      "source_cell": "[13, -3]",
+      "source_electrode": "414",
+      "target_cell": "[13, 5]",
+      "target_electrode": "266",
+      "static_path_cells": "[[13, -3], [13, -1], [13, 0], [13, 1], [13, 2], [13, 3], [13, 4], [13, 5]]",
+      "static_path_electrodes": "414 413 261 262 263 264 265 266",
+      "scheduled_path_cells": "[null, [13, -3], [13, -3], [13, -3], [13, -1], [13, 0], [13, 1], [13, 2], [13, 2], [13, 2], [13, 2], [13, 3], [13, 4], [13, 5]]",
+      "scheduled_path_electrodes": "- 414 414 414 413 261 262 263 263 263 263 264 265 266",
+      "path_length_steps": 7,
+      "wait_steps": 5,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 16,
+      "source_cell": "[22, 6]",
+      "source_electrode": "412",
+      "target_cell": "[13, 14]",
+      "target_electrode": "275",
+      "static_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [14, 13], [13, 13], [13, 14]]",
+      "static_path_electrodes": "412 411 387 367 347 327 307 308 309 310 311 312 313 314 294 274 275",
+      "scheduled_path_cells": "[null, [22, 6], [22, 6], [22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [14, 13], [13, 13], [13, 14]]",
+      "scheduled_path_electrodes": "- 412 412 412 411 387 367 347 327 307 308 309 310 311 312 313 314 294 274 275",
+      "path_length_steps": 16,
+      "wait_steps": 2,
+      "release_delay_steps": 1
+    },
+    {
+      "droplet_id": 17,
+      "source_cell": "[-3, 13]",
+      "source_electrode": "404",
+      "target_cell": "[5, 14]",
+      "target_electrode": "115",
+      "static_path_cells": "[[-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [4, 13], [5, 13], [5, 14]]",
+      "static_path_electrodes": "404 403 14 34 54 74 94 114 115",
+      "scheduled_path_cells": "[null, null, null, null, [-3, 13], [-3, 13], [-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [3, 13], [4, 13], [5, 13], [5, 14]]",
+      "scheduled_path_electrodes": "- - - - 404 404 404 403 14 34 54 74 74 94 114 115",
+      "path_length_steps": 8,
+      "wait_steps": 3,
+      "release_delay_steps": 4
+    },
+    {
+      "droplet_id": 18,
+      "source_cell": "[-3, 6]",
+      "source_electrode": "402",
+      "target_cell": "[5, 5]",
+      "target_electrode": "106",
+      "static_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [3, 5], [4, 5], [5, 5]]",
+      "static_path_electrodes": "402 401 7 27 47 67 66 86 106",
+      "scheduled_path_cells": "[null, null, null, null, [-3, 6], [-3, 6], [-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [3, 5], [3, 5], [3, 5], [4, 5], [5, 5]]",
+      "scheduled_path_electrodes": "- - - - 402 402 402 401 7 27 47 67 66 66 66 86 106",
+      "path_length_steps": 8,
+      "wait_steps": 4,
+      "release_delay_steps": 4
+    },
+    {
+      "droplet_id": 19,
+      "source_cell": "[22, 13]",
+      "source_electrode": "410",
+      "target_cell": "[9, 16]",
+      "target_electrode": "197",
+      "static_path_cells": "[[22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [16, 13], [15, 13], [15, 14], [15, 15], [15, 16], [14, 16], [13, 16], [12, 16], [11, 16], [10, 16], [9, 16]]",
+      "static_path_electrodes": "410 409 394 374 354 334 314 315 316 317 297 277 257 237 217 197",
+      "scheduled_path_cells": "[null, null, null, null, [22, 13], [22, 13], [22, 13], [20, 13], [19, 13], [18, 13], [17, 13], [17, 13], [16, 13], [15, 13], [15, 14], [15, 15], [15, 16], [14, 16], [13, 16], [12, 16], [11, 16], [10, 16], [9, 16]]",
+      "scheduled_path_electrodes": "- - - - 410 410 410 409 394 374 354 354 334 314 315 316 317 297 277 257 237 217 197",
+      "path_length_steps": 15,
+      "wait_steps": 3,
+      "release_delay_steps": 4
+    },
+    {
+      "droplet_id": 20,
+      "source_cell": "[13, -3]",
+      "source_electrode": "414",
+      "target_cell": "[13, 3]",
+      "target_electrode": "264",
+      "static_path_cells": "[[13, -3], [13, -1], [13, 0], [13, 1], [13, 2], [13, 3]]",
+      "static_path_electrodes": "414 413 261 262 263 264",
+      "scheduled_path_cells": "[null, null, null, null, [13, -3], [13, -3], [13, -3], [13, -1], [13, 0], [13, 0], [13, 0], [13, 0], [13, 1], [13, 2], [13, 3]]",
+      "scheduled_path_electrodes": "- - - - 414 414 414 413 261 261 261 261 262 263 264",
+      "path_length_steps": 5,
+      "wait_steps": 5,
+      "release_delay_steps": 4
+    },
+    {
+      "droplet_id": 21,
+      "source_cell": "[22, 6]",
+      "source_electrode": "412",
+      "target_cell": "[13, 16]",
+      "target_electrode": "277",
+      "static_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16], [14, 16], [13, 16]]",
+      "static_path_electrodes": "412 411 387 367 347 327 307 308 309 310 311 312 313 314 315 316 317 297 277",
+      "scheduled_path_cells": "[null, null, null, null, [22, 6], [22, 6], [22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [17, 6], [16, 6], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16], [14, 16], [13, 16]]",
+      "scheduled_path_electrodes": "- - - - 412 412 412 411 387 367 347 347 327 307 308 309 310 311 312 313 314 315 316 317 297 277",
+      "path_length_steps": 18,
+      "wait_steps": 3,
+      "release_delay_steps": 4
+    },
+    {
+      "droplet_id": 22,
+      "source_cell": "[6, -3]",
+      "source_electrode": "416",
+      "target_cell": "[5, 3]",
+      "target_electrode": "104",
+      "static_path_cells": "[[6, -3], [6, -1], [6, 0], [5, 0], [5, 1], [5, 2], [5, 3]]",
+      "static_path_electrodes": "416 415 121 101 102 103 104",
+      "scheduled_path_cells": "[null, null, null, null, null, [6, -3], [6, -3], [6, -3], [6, -3], [6, -1], [6, 0], [5, 0], [5, 1], [5, 2], [5, 3]]",
+      "scheduled_path_electrodes": "- - - - - 416 416 416 416 415 121 101 102 103 104",
+      "path_length_steps": 6,
+      "wait_steps": 3,
+      "release_delay_steps": 5
+    },
+    {
+      "droplet_id": 23,
+      "source_cell": "[6, 22]",
+      "source_electrode": "406",
+      "target_cell": "[5, 16]",
+      "target_electrode": "117",
+      "static_path_cells": "[[6, 22], [6, 20], [6, 19], [5, 19], [5, 18], [5, 17], [5, 16]]",
+      "static_path_electrodes": "406 405 140 120 119 118 117",
+      "scheduled_path_cells": "[null, null, null, null, null, [6, 22], [6, 22], [6, 22], [6, 22], [6, 20], [6, 19], [5, 19], [5, 18], [5, 17], [5, 16]]",
+      "scheduled_path_electrodes": "- - - - - 406 406 406 406 405 140 120 119 118 117",
+      "path_length_steps": 6,
+      "wait_steps": 3,
+      "release_delay_steps": 5
+    },
+    {
+      "droplet_id": 24,
+      "source_cell": "[13, 22]",
+      "source_electrode": "408",
+      "target_cell": "[9, 18]",
+      "target_electrode": "199",
+      "static_path_cells": "[[13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [10, 19], [9, 19], [9, 18]]",
+      "static_path_electrodes": "408 407 280 260 240 220 200 199",
+      "scheduled_path_cells": "[null, null, null, null, null, [13, 22], [13, 22], [13, 22], [13, 22], [13, 20], [13, 19], [12, 19], [11, 19], [10, 19], [9, 19], [9, 18]]",
+      "scheduled_path_electrodes": "- - - - - 408 408 408 408 407 280 260 240 220 200 199",
+      "path_length_steps": 7,
+      "wait_steps": 3,
+      "release_delay_steps": 5
+    },
+    {
+      "droplet_id": 25,
+      "source_cell": "[13, -3]",
+      "source_electrode": "414",
+      "target_cell": "[9, 1]",
+      "target_electrode": "182",
+      "static_path_cells": "[[13, -3], [13, -1], [13, 0], [12, 0], [11, 0], [10, 0], [9, 0], [9, 1]]",
+      "static_path_electrodes": "414 413 261 241 221 201 181 182",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, [13, -3], [13, -3], [13, -3], [13, -3], [13, -3], [13, -3], [13, -1], [13, 0], [12, 0], [11, 0], [10, 0], [9, 0], [9, 1]]",
+      "scheduled_path_electrodes": "- - - - - - - 414 414 414 414 414 414 413 261 241 221 201 181 182",
+      "path_length_steps": 7,
+      "wait_steps": 5,
+      "release_delay_steps": 7
+    },
+    {
+      "droplet_id": 26,
+      "source_cell": "[22, 6]",
+      "source_electrode": "412",
+      "target_cell": "[11, 1]",
+      "target_electrode": "222",
+      "static_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [15, 5], [15, 4], [15, 3], [15, 2], [15, 1], [14, 1], [13, 1], [12, 1], [11, 1]]",
+      "static_path_electrodes": "412 411 387 367 347 327 307 306 305 304 303 302 282 262 242 222",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, [22, 6], [22, 6], [22, 6], [20, 6], [19, 6], [19, 6], [18, 6], [17, 6], [17, 6], [16, 6], [15, 6], [15, 5], [15, 4], [15, 3], [15, 2], [15, 1], [14, 1], [13, 1], [12, 1], [11, 1]]",
+      "scheduled_path_electrodes": "- - - - - - - 412 412 412 411 387 387 367 347 347 327 307 306 305 304 303 302 282 262 242 222",
+      "path_length_steps": 15,
+      "wait_steps": 4,
+      "release_delay_steps": 7
+    },
+    {
+      "droplet_id": 27,
+      "source_cell": "[-3, 6]",
+      "source_electrode": "402",
+      "target_cell": "[7, 1]",
+      "target_electrode": "142",
+      "static_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [3, 5], [3, 4], [3, 3], [3, 2], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1]]",
+      "static_path_electrodes": "402 401 7 27 47 67 66 65 64 63 62 82 102 122 142",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, [-3, 6], [-3, 6], [-3, 6], [-1, 6], [0, 6], [1, 6], [1, 6], [1, 6], [1, 6], [2, 6], [3, 6], [3, 5], [3, 4], [3, 3], [3, 2], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1]]",
+      "scheduled_path_electrodes": "- - - - - - - 402 402 402 401 7 27 27 27 27 47 67 66 65 64 63 62 82 102 122 142",
+      "path_length_steps": 14,
+      "wait_steps": 5,
+      "release_delay_steps": 7
+    },
+    {
+      "droplet_id": 28,
+      "source_cell": "[13, 22]",
+      "source_electrode": "408",
+      "target_cell": "[13, 18]",
+      "target_electrode": "279",
+      "static_path_cells": "[[13, 22], [13, 20], [13, 19], [13, 18]]",
+      "static_path_electrodes": "408 407 280 279",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, null, null, [13, 22], [13, 22], [13, 22], [13, 22], [13, 20], [13, 19], [13, 18]]",
+      "scheduled_path_electrodes": "- - - - - - - - - 408 408 408 408 407 280 279",
+      "path_length_steps": 3,
+      "wait_steps": 3,
+      "release_delay_steps": 9
+    },
+    {
+      "droplet_id": 29,
+      "source_cell": "[22, 6]",
+      "source_electrode": "412",
+      "target_cell": "[13, 1]",
+      "target_electrode": "262",
+      "static_path_cells": "[[22, 6], [20, 6], [19, 6], [18, 6], [17, 6], [16, 6], [15, 6], [15, 5], [15, 4], [15, 3], [15, 2], [15, 1], [14, 1], [13, 1]]",
+      "static_path_electrodes": "412 411 387 367 347 327 307 306 305 304 303 302 282 262",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, null, null, null, [22, 6], [22, 6], [22, 6], [22, 6], [20, 6], [19, 6], [19, 6], [18, 6], [17, 6], [17, 6], [16, 6], [15, 6], [15, 5], [15, 4], [15, 3], [15, 2], [15, 1], [14, 1], [13, 1]]",
+      "scheduled_path_electrodes": "- - - - - - - - - - 412 412 412 412 411 387 387 367 347 347 327 307 306 305 304 303 302 282 262",
+      "path_length_steps": 13,
+      "wait_steps": 5,
+      "release_delay_steps": 10
+    },
+    {
+      "droplet_id": 30,
+      "source_cell": "[-3, 13]",
+      "source_electrode": "404",
+      "target_cell": "[5, 18]",
+      "target_electrode": "119",
+      "static_path_cells": "[[-3, 13], [-1, 13], [0, 13], [1, 13], [2, 13], [3, 13], [3, 14], [3, 15], [3, 16], [3, 17], [3, 18], [4, 18], [5, 18]]",
+      "static_path_electrodes": "404 403 14 34 54 74 75 76 77 78 79 99 119",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, [-3, 13], [-3, 13], [-3, 13], [-1, 13], [0, 13], [1, 13], [1, 13], [2, 13], [3, 13], [3, 14], [3, 15], [3, 16], [3, 17], [3, 18], [4, 18], [5, 18]]",
+      "scheduled_path_electrodes": "- - - - - - - 404 404 404 403 14 34 34 54 74 75 76 77 78 79 99 119",
+      "path_length_steps": 12,
+      "wait_steps": 3,
+      "release_delay_steps": 7
+    },
+    {
+      "droplet_id": 31,
+      "source_cell": "[-3, 6]",
+      "source_electrode": "402",
+      "target_cell": "[5, 1]",
+      "target_electrode": "102",
+      "static_path_cells": "[[-3, 6], [-1, 6], [0, 6], [1, 6], [2, 6], [3, 6], [3, 5], [3, 4], [3, 3], [3, 2], [3, 1], [4, 1], [5, 1]]",
+      "static_path_electrodes": "402 401 7 27 47 67 66 65 64 63 62 82 102",
+      "scheduled_path_cells": "[null, null, null, null, null, null, null, null, null, null, [-3, 6], [-3, 6], [-3, 6], [-1, 6], [-1, 6], [-1, 6], [-1, 6], [0, 6], [1, 6], [1, 6], [2, 6], [3, 6], [3, 5], [3, 4], [3, 3], [3, 2], [3, 1], [4, 1], [5, 1]]",
+      "scheduled_path_electrodes": "- - - - - - - - - - 402 402 402 401 401 401 401 7 27 27 47 67 66 65 64 63 62 82 102",
+      "path_length_steps": 12,
+      "wait_steps": 6,
+      "release_delay_steps": 10
+    }
+  ]
+}

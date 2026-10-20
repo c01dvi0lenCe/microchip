@@ -1,0 +1,12 @@
+# Software-only experiments; no serial, camera, or hardware output.
+seed_start: 260600
+repeats: 20
+droplet_counts: [2, 4, 8, 12, 16, 20, 24, 30]
+scale_obstacle_count: 20
+baseline_plot_droplets: 8
+congestion_gate_widths: [20, 7, 3]
+congestion_droplets: 8
+fault_counts: [0, 1, 2, 4, 6, 8, 10]
+fault_droplets: 8
+fault_placements: [random, path_critical]
+emission_spacing_steps: 3

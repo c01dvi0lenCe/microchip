@@ -1,0 +1,105 @@
+{
+  "created_at": "2026-10-06T19:29:57.711326+08:00",
+  "simulation_rerun": false,
+  "original_data_unchanged": true,
+  "input_sha256": {
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\summary.csv": "abef99df1c2ea431a480c7de2d9baac4e2f74bf0cf8a358c9364dcd81828fb44",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\summary.json": "be2cdea6fafebaecb30577461de26f45fb8d96b58aa342615a99ea961cec56cd",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\config.json": "058961f9b1345d38f6169930b5e0beb184b91d4eb288f4309c084d372c95051f",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v2.csv": "809ad351311da8daa3c8fa422f63ecda350eb3601216ae461680bc90a148000e",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v2.json": "420d73e8e5141d3d9090471e56242924c1158ae756f538e36c7c79fece7afc33",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\v1_replay_records.csv": "0c05eb36263c8c1cff0de3e7d2c86d4e1816249cb5c9fadfa2034dc3bc8f108a",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\v2_records.csv": "cf8d8f8e0b7a577ab5f7511015aa381a166f088ca9cb582691a3575c75016490",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\comparison.json": "ecad74f2e452711cf17bccc7ec14f091cc03576d40bfaee78d60653dd4696383",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\planning_time_tails_v1.csv": "752803aa0be31ba793891a4c423ddb7c53f8aa24aea78e81ad6ff93131cbb991"
+  },
+  "protected_data_sha256": {
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\config.json": "058961f9b1345d38f6169930b5e0beb184b91d4eb288f4309c084d372c95051f",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\failed_replays.csv": "53f070fab75a18f734032ae9579d34645ce3654a75ece9d8634177b4b2ce179a",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\manifest.json": "4fba6eee4c46e3e63d5173d527a7c188224067244256da5d30adedbcd44d3a66",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\plot_manifest.json": "7cfff1d416091703573f71b675f77fcacc3c6632e9bd625f66f6855ece9a8cfd",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\records.csv": "ee9dcc457485cd991fcf8ad75a3c9fed92f0ca852aebda363b74c41e44b40e47",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\records.jsonl": "6bf58c54d6aa7168ea4130cac5d37b1c1a3b4d38ba8e91b3551192f7838b7319",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\summary.csv": "abef99df1c2ea431a480c7de2d9baac4e2f74bf0cf8a358c9364dcd81828fb44",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\summary.json": "be2cdea6fafebaecb30577461de26f45fb8d96b58aa342615a99ea961cec56cd",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited\\traces.jsonl": "58955f5add6e03f5b9f2d3192ef45a83d7801ecdc0a72a0c920830a0eda69529",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\comparison.json": "ecad74f2e452711cf17bccc7ec14f091cc03576d40bfaee78d60653dd4696383",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\manifest.json": "647319e43029e31084e7e04806cc65697740e75311c366dd0f5fc028ca220161",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\matched_comparison.csv": "08fdff2550fcec8efa4c89b4a30840d9f4e2a5380e252f2c6c633a2f59c7bbf8",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\planning_time_tails_v1.csv": "752803aa0be31ba793891a4c423ddb7c53f8aa24aea78e81ad6ff93131cbb991",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\plot_manifest.json": "451547fd0339ee957f969dbe826ac5b5aaf3cc0288bae74a8b9c590239273a93",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\replay_traces.jsonl": "e5797e35cf1c5b46aa30281ceed419042fa5eaa2a126ccf5d107c3ee081e33ec",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\slow_seeds_v1.csv": "80f4c44896214ab99ac76fcc60ae9830060a40d91e38f49c87914aa4753455d4",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v1_replay.csv": "963c34cf8053c5653aef1f875cce1b3dcb629fd007894162b9b8c705994f66d6",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v1_replay.json": "186dd82f5f3caa696b9b159caf03c74a52d80c8300d63de5adf5aa40992e3120",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v2.csv": "809ad351311da8daa3c8fa422f63ecda350eb3601216ae461680bc90a148000e",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\summary_v2.json": "420d73e8e5141d3d9090471e56242924c1158ae756f538e36c7c79fece7afc33",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\v1_original_records.csv": "d1a7d8d669b1451bd606a92f78309f0913c8bb7a8fde36cb3271a4f02eabb263",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\v1_replay_records.csv": "0c05eb36263c8c1cff0de3e7d2c86d4e1816249cb5c9fadfa2034dc3bc8f108a",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_identity_fix_20261006\\replay\\v2_records.csv": "cf8d8f8e0b7a577ab5f7511015aa381a166f088ca9cb582691a3575c75016490"
+  },
+  "csv_json_statistics_exact_match": true,
+  "font": {
+    "family": "Arial",
+    "font_files": {
+      "regular": {
+        "path": "C:\\Windows\\Fonts\\arial.ttf",
+        "sha256": "c9b76220a5be42ead4733611e417cd65c5fd8aeaa33eb56576ac378a37d130a1"
+      },
+      "bold": {
+        "path": "C:\\Windows\\Fonts\\arialbd.ttf",
+        "sha256": "766f06ac8761f82f25d032a220e89438f6064591af9915061f20b949efdedf69"
+      },
+      "italic": {
+        "path": "C:\\Windows\\Fonts\\ariali.ttf",
+        "sha256": "79a5742b865cf06891d4ae43e42cac0e5169c7b7b06b5b3c24ef8e0966d27b62"
+      }
+    }
+  },
+  "png_dpi": 300,
+  "figure_width_inches": 6.9,
+  "point_sizes": {
+    "title": 11.5,
+    "axis": 10.5,
+    "legend": 10.0,
+    "tick": 9.5
+  },
+  "colors": {
+    "methods": {
+      "static_astar": "#7B8C96",
+      "safe_serial": "#B58C5B",
+      "coordinated": "#477A9B"
+    },
+    "faults": {
+      "random": "#477A9B",
+      "path_critical": "#AE7273"
+    },
+    "versions": {
+      "v1": "#AE7273",
+      "v2": "#477A9B"
+    }
+  },
+  "drawing": {
+    "line_width_pt": 1.35,
+    "marker_size_pt": 4.5,
+    "error_width_pt": 0.65,
+    "cap_size_pt": 2.0
+  },
+  "statistics": "Existing mean/sample SD, Wilson 95% bounds and metric_n copied exactly from CSV; no recomputation or seed filtering.",
+  "files": [
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\A_baseline_final.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\A_baseline_final.pdf",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\B_scalability_final.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\B_scalability_final.pdf",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\C_congestion_final.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\C_congestion_final.pdf",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\D_v2_robustness_final.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\D_v2_robustness_final.pdf",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\D_identity_validation.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\D_identity_validation.pdf",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PNG\\B_planning_tails.png",
+    "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\第三章统计图_论文最终版_20261006_单行版\\PDF\\B_planning_tails.pdf"
+  ],
+  "paired_success_count": 245,
+  "paired_makespan_changed": 0
+}

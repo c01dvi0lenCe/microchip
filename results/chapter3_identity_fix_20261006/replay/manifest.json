@@ -1,0 +1,56 @@
+{
+  "simulation_only": true,
+  "created_at": "2026-10-06T18:47:03.826438+08:00",
+  "config": {
+    "seed_start": 260600,
+    "repeats": 20,
+    "droplet_counts": [
+      2,
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      30
+    ],
+    "scale_obstacle_count": 20,
+    "baseline_plot_droplets": 8,
+    "congestion_gate_widths": [
+      20,
+      7,
+      3
+    ],
+    "congestion_droplets": 8,
+    "fault_counts": [
+      0,
+      1,
+      2,
+      4,
+      6,
+      8,
+      10
+    ],
+    "fault_droplets": 8,
+    "fault_placements": [
+      "random",
+      "path_critical"
+    ],
+    "emission_spacing_steps": 3
+  },
+  "baseline": "D:\\I\\ZJU\\有源矩阵\\Droplet代码\\上位机视觉系统\\results\\chapter3_statistics_20261006_audited",
+  "baseline_records_sha256": "6bf58c54d6aa7168ea4130cac5d37b1c1a3b4d38ba8e91b3551192f7838b7319",
+  "baseline_traces_sha256": "58955f5add6e03f5b9f2d3192ef45a83d7801ecdc0a72a0c920830a0eda69529",
+  "v1_source": {
+    "scheduler.py": "a09dc8b6b781f08e9bc5304c34047a6c7c3908f6574e4a212367968f1a2932fc",
+    "assignment.py": "a9341f219dbfc72c808b7143943262234bcd9ea717417a37d9cba51663c3c061"
+  },
+  "v2_source": {
+    "dmf/planning/scheduler.py": "bf0b3959b98504cb3157a02d8161fbf6d9830214c42f1b67b87fc4676a94a9bc",
+    "dmf/planning/assignment.py": "2ef7397a21e3cb4531e7de09049f41fc5b3c04c0bf2f179a9bb1aa9d10c01ec8",
+    "scripts/run_chapter3_statistics.py": "4225b144989c8e55390697e66f42b392e901adad66f9179246b81a3f81b25702",
+    "scripts/replay_chapter3_fault_fix.py": "69bacc5984e316a47e4a51409245a8071367fa35e2a912a6c6a419b218144691"
+  },
+  "pairing": "Identical stored original schedules, current positions, completed IDs and faults; never regenerate tasks.",
+  "timing": "Fresh hash-verified v1 and v2 calls alternate order; each seed's zero-fault control is reused, not independently duplicated."
+}

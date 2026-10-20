@@ -1,0 +1,10 @@
+﻿assignment_changed_by_fallback,completed_droplets_held,conflict_pair_steps,cross_source_conflict_pair_steps,delta_makespan_vs_original,delta_makespan_vs_zero_fault,detour_ratio,detour_vs_zero_fault,droplet_count,droplets,edge_swap,eligible,fault_count,fault_step,faults_on_remaining_path,gate_width,group,makespan_steps,max_release_delay_steps,method,nominal_timeline_steps,paired_reduction_vs_serial_percent,peak_simultaneous_moves,placement,planning_time_ms,reason,reference_pair_origin,replanning_time_ms,safety_valid,seed,shared_initial_assignment_ms,spacing,spatial_length,static_core_overlap_pair_cells,status,success,total_release_delay_steps,transition_spacing,vertex,wait_fraction,wait_steps
+,True,,,,,,,8,,,True,8,13,8,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,77.5783,,260607,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,10,13,10,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,77.0927,,260607,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,2,15,2,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,74.7858,,260616,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,6,11,6,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,200.2416,,260618,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,8,11,8,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,166.454,,260618,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,10,11,10,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,155.3147,,260618,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,6,14,6,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,86.3873,,260619,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,8,14,8,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,71.8558,,260619,,,,,invalid_replay,False,,,,,
+,True,,,,,,,8,,,True,10,14,10,,fault,,,coordinated,,,,path_critical,,identity_start_changed,,76.4089,,260619,,,,,invalid_replay,False,,,,,

@@ -1,0 +1,198 @@
+{
+  "scenario": "runtime_fault_global_replan",
+  "simulation_only": true,
+  "droplet_count": 4,
+  "fault_step": 4,
+  "fault_cells": [
+    [
+      6,
+      8
+    ],
+    [
+      10,
+      8
+    ]
+  ],
+  "fault_electrodes": [
+    "129",
+    "209"
+  ],
+  "fault_intersects_original_unfinished_route": true,
+  "per_droplet_remaining_lengths": [
+    {
+      "droplet_id": 1,
+      "baseline": 0,
+      "comparison": 0,
+      "outcome": "held at target"
+    },
+    {
+      "droplet_id": 2,
+      "baseline": 11,
+      "comparison": 13,
+      "outcome": "detoured"
+    },
+    {
+      "droplet_id": 3,
+      "baseline": 11,
+      "comparison": 13,
+      "outcome": "detoured"
+    },
+    {
+      "droplet_id": 4,
+      "baseline": 11,
+      "comparison": 11,
+      "outcome": "route retained"
+    }
+  ],
+  "current_positions": {
+    "1": [
+      2,
+      5
+    ],
+    "2": [
+      6,
+      5
+    ],
+    "3": [
+      10,
+      5
+    ],
+    "4": [
+      15,
+      5
+    ]
+  },
+  "completed_droplet_ids": [
+    1
+  ],
+  "unfinished_droplet_ids": [
+    2,
+    3,
+    4
+  ],
+  "before": [
+    {
+      "droplet_id": 1,
+      "source_cell": "[2, 1]",
+      "source_electrode": "42",
+      "target_cell": "[2, 5]",
+      "target_electrode": "46",
+      "static_path_cells": "[[2, 1], [2, 2], [2, 3], [2, 4], [2, 5]]",
+      "static_path_electrodes": "42 43 44 45 46",
+      "scheduled_path_cells": "[[2, 1], [2, 2], [2, 3], [2, 4], [2, 5]]",
+      "scheduled_path_electrodes": "42 43 44 45 46",
+      "path_length_steps": 4,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 2,
+      "source_cell": "[6, 1]",
+      "source_electrode": "122",
+      "target_cell": "[6, 16]",
+      "target_electrode": "137",
+      "static_path_cells": "[[6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [6, 15], [6, 16]]",
+      "static_path_electrodes": "122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137",
+      "scheduled_path_cells": "[[6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7], [6, 8], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [6, 15], [6, 16]]",
+      "scheduled_path_electrodes": "122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137",
+      "path_length_steps": 15,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 3,
+      "source_cell": "[10, 1]",
+      "source_electrode": "202",
+      "target_cell": "[10, 16]",
+      "target_electrode": "217",
+      "static_path_cells": "[[10, 1], [10, 2], [10, 3], [10, 4], [10, 5], [10, 6], [10, 7], [10, 8], [10, 9], [10, 10], [10, 11], [10, 12], [10, 13], [10, 14], [10, 15], [10, 16]]",
+      "static_path_electrodes": "202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217",
+      "scheduled_path_cells": "[[10, 1], [10, 2], [10, 3], [10, 4], [10, 5], [10, 6], [10, 7], [10, 8], [10, 9], [10, 10], [10, 11], [10, 12], [10, 13], [10, 14], [10, 15], [10, 16]]",
+      "scheduled_path_electrodes": "202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217",
+      "path_length_steps": 15,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 4,
+      "source_cell": "[15, 1]",
+      "source_electrode": "302",
+      "target_cell": "[15, 16]",
+      "target_electrode": "317",
+      "static_path_cells": "[[15, 1], [15, 2], [15, 3], [15, 4], [15, 5], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16]]",
+      "static_path_electrodes": "302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317",
+      "scheduled_path_cells": "[[15, 1], [15, 2], [15, 3], [15, 4], [15, 5], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16]]",
+      "scheduled_path_electrodes": "302 303 304 305 306 307 308 309 310 311 312 313 314 315 316 317",
+      "path_length_steps": 15,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    }
+  ],
+  "after": [
+    {
+      "droplet_id": 1,
+      "source_cell": "[2, 1]",
+      "source_electrode": "42",
+      "target_cell": "[2, 5]",
+      "target_electrode": "46",
+      "static_path_cells": "[[2, 1], [2, 2], [2, 3], [2, 4], [2, 5]]",
+      "static_path_electrodes": "42 43 44 45 46",
+      "scheduled_path_cells": "[[2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5], [2, 5]]",
+      "scheduled_path_electrodes": "46 46 46 46 46 46 46 46 46 46 46 46 46 46",
+      "path_length_steps": 4,
+      "wait_steps": 13,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 2,
+      "source_cell": "[6, 5]",
+      "source_electrode": "126",
+      "target_cell": "[6, 16]",
+      "target_electrode": "137",
+      "static_path_cells": "[[6, 5], [6, 6], [6, 7], [5, 7], [5, 8], [5, 9], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [6, 15], [6, 16]]",
+      "static_path_electrodes": "126 127 128 108 109 110 130 131 132 133 134 135 136 137",
+      "scheduled_path_cells": "[[6, 5], [6, 6], [6, 7], [5, 7], [5, 8], [5, 9], [6, 9], [6, 10], [6, 11], [6, 12], [6, 13], [6, 14], [6, 15], [6, 16]]",
+      "scheduled_path_electrodes": "126 127 128 108 109 110 130 131 132 133 134 135 136 137",
+      "path_length_steps": 13,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 3,
+      "source_cell": "[10, 5]",
+      "source_electrode": "206",
+      "target_cell": "[10, 16]",
+      "target_electrode": "217",
+      "static_path_cells": "[[10, 5], [10, 6], [10, 7], [9, 7], [9, 8], [9, 9], [10, 9], [10, 10], [10, 11], [10, 12], [10, 13], [10, 14], [10, 15], [10, 16]]",
+      "static_path_electrodes": "206 207 208 188 189 190 210 211 212 213 214 215 216 217",
+      "scheduled_path_cells": "[[10, 5], [10, 6], [10, 7], [9, 7], [9, 8], [9, 9], [10, 9], [10, 10], [10, 11], [10, 12], [10, 13], [10, 14], [10, 15], [10, 16]]",
+      "scheduled_path_electrodes": "206 207 208 188 189 190 210 211 212 213 214 215 216 217",
+      "path_length_steps": 13,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    },
+    {
+      "droplet_id": 4,
+      "source_cell": "[15, 5]",
+      "source_electrode": "306",
+      "target_cell": "[15, 16]",
+      "target_electrode": "317",
+      "static_path_cells": "[[15, 5], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16]]",
+      "static_path_electrodes": "306 307 308 309 310 311 312 313 314 315 316 317",
+      "scheduled_path_cells": "[[15, 5], [15, 6], [15, 7], [15, 8], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16]]",
+      "scheduled_path_electrodes": "306 307 308 309 310 311 312 313 314 315 316 317",
+      "path_length_steps": 11,
+      "wait_steps": 0,
+      "release_delay_steps": 0
+    }
+  ],
+  "nominal_remaining_path_length": 33,
+  "fault_aware_remaining_path_length": 37,
+  "detour_ratio": 1.121212121212121,
+  "replan_compute_ms": 0.7034,
+  "routing_time_ms": 0.2231,
+  "scheduling_time_ms": 0.4803,
+  "status": "success",
+  "completed_droplets_held_at_goal": true,
+  "unfinished_replanned_from_current_positions": true
+}

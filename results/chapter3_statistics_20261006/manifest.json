@@ -1,0 +1,87 @@
+{
+  "simulation_only": true,
+  "created_at": "2026-10-06T18:25:28.451646+08:00",
+  "config": {
+    "seed_start": 260600,
+    "repeats": 20,
+    "droplet_counts": [
+      2,
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      30
+    ],
+    "scale_obstacle_count": 20,
+    "baseline_plot_droplets": 8,
+    "congestion_gate_widths": [
+      20,
+      7,
+      3
+    ],
+    "congestion_droplets": 8,
+    "fault_counts": [
+      0,
+      1,
+      2,
+      4,
+      6,
+      8,
+      10
+    ],
+    "fault_droplets": 8,
+    "fault_placements": [
+      "random",
+      "path_critical"
+    ],
+    "emission_spacing_steps": 3
+  },
+  "seeds": [
+    260600,
+    260601,
+    260602,
+    260603,
+    260604,
+    260605,
+    260606,
+    260607,
+    260608,
+    260609,
+    260610,
+    260611,
+    260612,
+    260613,
+    260614,
+    260615,
+    260616,
+    260617,
+    260618,
+    260619
+  ],
+  "python": "3.12.2",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "numpy": "1.26.4",
+  "git_head": "c111f37d58a1b50355be6f9b2d4b5d12294d06fc",
+  "source_sha256": {
+    "scripts\\run_chapter3_statistics.py": "098cd65fadd0007835880970338d2e56e6469954092330514c16bb4082dd37d1",
+    "scripts\\generate_chapter3_advantage_case.py": "59d8cf508ddec7feeb2d3308ef2900f60ff81fd52f535bc8ca0b35e902b7fdaa",
+    "presets\\复杂瓶颈并行运输.json": "ad9ae190f0bbf229c12d786fea5c4e7c1ace901e130f35f40c73d9bde56074f0",
+    "dmf\\planning\\__init__.py": "bf73796d819674b8db65b8f0442478d21404dad7b0a5b338247da4c6bcaa6589",
+    "dmf\\planning\\assignment.py": "a9341f219dbfc72c808b7143943262234bcd9ea717417a37d9cba51663c3c061",
+    "dmf\\planning\\astar.py": "f6e15f39a53874ac329f6a9e343e4341376bfd754cada0ce05bd10a9681ae434",
+    "dmf\\planning\\geometry.py": "4ff8c8b12340a9397a8ec10e3fee7ab8bdfe7eeaf31f823f2f2b5d67652fc488",
+    "dmf\\planning\\scheduler.py": "a09dc8b6b781f08e9bc5304c34047a6c7c3908f6574e4a212367968f1a2932fc",
+    "dmf\\layout.py": "40bdcdf4d245d34350a550a2ef37dca7b2213a161654d3ba4cc4169bf176f149",
+    "dmf\\models.py": "22655bb8fe763a4240544038ade2a71088acf10d3ef9c5b5314af5704731fb18"
+  },
+  "records": 940,
+  "elapsed_s": 60.29686269999365,
+  "mean_errors": "Sample SD; success rates use Wilson 95% intervals. Missing values remain null.",
+  "baseline_pairing": "References share final production source-target pairs when available; fallback changes are logged.",
+  "completion": "Geometric graph replay plus independent safety audit; not physical arrival.",
+  "timing": "Production end-to-end call vs reference route generation plus measured initial greedy assignment; audit/export excluded.",
+  "fault_endpoint_policy": "Faults exclude current/target cells and known obstacles. Random placement is uniform over remaining core cells.",
+  "fault_baseline": "Same snapshot zero-fault replanning; completed targets stay occupied; all emitted droplets remain present."
+}

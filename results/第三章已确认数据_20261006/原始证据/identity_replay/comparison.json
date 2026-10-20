@@ -1,0 +1,21 @@
+{
+  "trials": 280,
+  "v1_status_counts": {
+    "success": 245,
+    "unreachable": 13,
+    "invalid_replay": 9,
+    "protective_pause": 13
+  },
+  "v2_status_counts": {
+    "success": 245,
+    "unreachable": 13,
+    "protective_pause": 22
+  },
+  "formerly_invalid_after": {
+    "protective_pause": 9
+  },
+  "common_success_trials": 245,
+  "common_makespan_changed": 0,
+  "common_length_changed": 0,
+  "v1_outcomes_match_original": true
+}

@@ -1,0 +1,98 @@
+{
+  "scenario": "fluidic_spacing_conflict_resolution",
+  "simulation_only": true,
+  "conflict_type": "fluidic_spacing",
+  "constraint": "pull-risk neighborhood",
+  "static_paths": [
+    [
+      [
+        0,
+        2
+      ],
+      [
+        0,
+        3
+      ],
+      [
+        0,
+        4
+      ]
+    ],
+    [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        2
+      ]
+    ]
+  ],
+  "scheduled_paths": [
+    [
+      [
+        0,
+        2
+      ],
+      [
+        0,
+        3
+      ],
+      [
+        0,
+        4
+      ]
+    ],
+    [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        2
+      ]
+    ]
+  ],
+  "uncoordinated_t1_positions": [
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      1
+    ]
+  ],
+  "uncoordinated_t1_manhattan_separation": 2,
+  "scheduled_t1_positions": [
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "wait_steps_total": 1,
+  "release_delay_steps": [
+    0,
+    0
+  ],
+  "scheduler_result": "scheduled_with_one_source_wait",
+  "scheduler": "dmf.planning.scheduler.schedule_multi_paths"
+}

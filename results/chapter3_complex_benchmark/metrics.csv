@@ -1,0 +1,4 @@
+﻿method,droplets,spatial_length,makespan_steps,wait_steps,total_release_delay_steps,peak_simultaneous_moves,conflict_pair_steps,cross_source_conflict_pair_steps,vertex,edge_swap,spacing,transition_spacing,safety_valid
+static_astar_fixed_dispensing,8,183,27,0,12,8,66,50,28,0,13,25,False
+safe_serial,8,183,183,0,658,1,0,0,0,0,0,0,True
+coordinated,8,183,34,36,12,8,0,0,0,0,0,0,True
