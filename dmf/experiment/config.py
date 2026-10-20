@@ -78,6 +78,8 @@ def load_config(path,mode=None):
     if c['mode']=='offline':
         if not source.get('video'):raise ValueError('source.video is required in offline mode')
         source['video']=str(resolve_path(path.parent,source['video']))
+        if source.get('timestamps_csv'):
+            source['timestamps_csv']=str(resolve_path(path.parent,source['timestamps_csv']))
     else:
         if source.get('backend') not in {'opencv','plugin'}:raise ValueError('live source.backend must be opencv or plugin')
     source.setdefault('frame_timeout_s',2.)

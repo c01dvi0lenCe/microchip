@@ -20,6 +20,7 @@ from .common import (
 class ClosedLoopControllerMixin:
     def _begin_current_step(self):
         if self.path_index >= len(self.path) - 1:
+            self._mark_operation_success()
             self.stop_auto_control("到达目标")
             return
         current = self.path[self.path_index]
@@ -72,6 +73,7 @@ class ClosedLoopControllerMixin:
         if self.mixing_index >= len(self.mixing_path) - 1:
             self._set_auto_active_cells({self.goal_cell})
             self._render_sim_camera_frame()
+            self._mark_operation_success()
             self.stop_auto_control("混合完成，四宫格循环结束")
             return
         current = self.mixing_path[self.mixing_index]
@@ -336,6 +338,7 @@ class ClosedLoopControllerMixin:
         ):
             self.mixing_index += 1
             if self.mixing_index >= len(self.mixing_path) - 1:
+                self._mark_operation_success()
                 self.stop_auto_control("混合完成，四宫格循环结束")
                 return
             self.log_feedback(
@@ -416,6 +419,7 @@ class ClosedLoopControllerMixin:
                 self.sim_droplets = [self.sim_droplet, self.sim_droplet_b]
                 self._set_auto_active_cells({self.split_left_cell, self.split_right_cell})
                 self._render_sim_camera_frame()
+                self._mark_operation_success()
                 self.stop_auto_control("分裂完成，已生成两个子液滴")
                 return
             if not forced_failure_active and now - self.step_start_time < self.split_stretch_duration_s + 0.35:
@@ -572,6 +576,7 @@ class ClosedLoopControllerMixin:
             action="advance",
         )
         if self.path_index + 1 >= len(self.path) - 1:
+            self._mark_operation_success()
             self.stop_auto_control("到达目标")
             return
         self.path_index += 1
@@ -593,6 +598,7 @@ class ClosedLoopControllerMixin:
             self.loop_cycles_completed += 1
             target_cycles = self._sync_loop_cycles()
             if self.loop_cycles_completed >= target_cycles:
+                self._mark_operation_success()
                 self.stop_auto_control(f"循环完成 {self.loop_cycles_completed}/{target_cycles} 圈")
                 return
             self.path_index = 0
@@ -624,6 +630,7 @@ class ClosedLoopControllerMixin:
         current = self.detected_cell or self.sim_droplet.cell
         if current == self.goal_cell:
             self.log_feedback("移动", "超时检查时液滴已在目标电极，结束任务", force=True)
+            self._mark_operation_success()
             self.stop_auto_control("到达目标")
             return
 

@@ -23,6 +23,15 @@ def polygon_mask(shape: tuple[int, int], region: ElectrodeRegion) -> np.ndarray:
     return output
 
 
+def coverage_for_region(mask: np.ndarray, region: ElectrodeRegion) -> float:
+    droplet_area = int(np.count_nonzero(mask))
+    if droplet_area == 0:
+        return 0.0
+    region_mask = polygon_mask(mask.shape, region)
+    intersection = int(np.count_nonzero((mask > 0) & (region_mask > 0)))
+    return intersection / droplet_area
+
+
 class DropletFeatureExtractor:
     def __init__(self, electrode_map: ElectrodeMap):
         self.electrode_map = electrode_map
@@ -80,9 +89,4 @@ class DropletFeatureExtractor:
     def _coverage(self, mask: Optional[np.ndarray], electrode_id: Optional[int]) -> Optional[float]:
         if mask is None or electrode_id is None:
             return None
-        droplet_area = int(np.count_nonzero(mask))
-        if droplet_area == 0:
-            return 0.0
-        region_mask = polygon_mask(mask.shape, self.electrode_map[electrode_id])
-        intersection = int(np.count_nonzero((mask > 0) & (region_mask > 0)))
-        return intersection / droplet_area
+        return coverage_for_region(mask, self.electrode_map[electrode_id])

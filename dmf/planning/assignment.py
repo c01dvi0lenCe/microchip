@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import heapq
+import time
 from typing import Iterable, Mapping, Optional
 
 from ..layout import (
@@ -12,9 +13,9 @@ from ..layout import (
     is_reservoir_cell,
     is_waste_reservoir_cell,
 )
-from ..models import MultiDropletAssignment
+from ..models import FaultReplanResult, MultiDropletAssignment
 from .geometry import target_merge_region_map
-from .scheduler import _same_merge_region, schedule_assignments_with_reroute
+from .scheduler import _same_merge_region, _settled_target_risk_obstacles, schedule_assignments_with_reroute
 
 
 def assign_sources_to_targets(
@@ -151,31 +152,68 @@ def build_multi_droplet_assignments(
     planner: "AStarPlanner",
     obstacles: Iterable[Cell] = (),
     source_capacity: Optional[Mapping[Cell, int]] = None,
+    faulty_electrodes: Iterable[Cell] = (),
+    planning_metrics: Optional[dict[str, float]] = None,
 ) -> list[MultiDropletAssignment]:
+    started_ns = time.perf_counter_ns()
+    timed_planner = _TimedPlanner(planner)
+    obstacle_set = set(obstacles) | set(faulty_electrodes)
     source_list = sorted(
         {source for source in sources if not is_waste_reservoir_cell(source)},
         key=lambda cell: electrode_id(cell[0], cell[1]),
     )
     target_list = _unique_cells(target_shape_cells)
     if not source_list or not target_list:
+        if planning_metrics is not None:
+            planning_metrics.update(
+                assignment_time_ms=0.0,
+                routing_time_ms=0.0,
+                scheduling_time_ms=0.0,
+                total_planning_time_ms=(time.perf_counter_ns() - started_ns) / 1_000_000,
+            )
         return []
 
-    raw_assignments = assign_sources_to_targets(source_list, target_list, planner, obstacles, source_capacity)
+    assignment_started_ns = time.perf_counter_ns()
+    routes_before_assignment = timed_planner.elapsed_ns
+    raw_assignments = assign_sources_to_targets(source_list, target_list, timed_planner, obstacle_set, source_capacity)
+    assignment_finished_ns = time.perf_counter_ns()
+    assignment_routing_ns = timed_planner.elapsed_ns - routes_before_assignment
+    assignment_logic_ns = max(0, assignment_finished_ns - assignment_started_ns - assignment_routing_ns)
     if len(raw_assignments) != len(target_list):
+        if planning_metrics is not None:
+            planning_metrics.update(
+                assignment_time_ms=assignment_logic_ns / 1_000_000,
+                routing_time_ms=assignment_routing_ns / 1_000_000,
+                scheduling_time_ms=0.0,
+                total_planning_time_ms=(time.perf_counter_ns() - started_ns) / 1_000_000,
+            )
         return []
 
     merge_regions = target_merge_region_map(target_list)
     raw_assignments = order_assignments_by_transport_dependencies(raw_assignments, merge_regions)
+    scheduling_started_ns = time.perf_counter_ns()
+    routes_before_scheduling = timed_planner.elapsed_ns
     raw_assignments, scheduled_paths, round_indices = schedule_assignments_with_reroute(
         raw_assignments,
-        planner,
-        obstacles,
+        timed_planner,
+        obstacle_set,
         merge_regions,
     )
+    scheduling_finished_ns = time.perf_counter_ns()
+    scheduling_routing_ns = timed_planner.elapsed_ns - routes_before_scheduling
     if len(scheduled_paths) != len(raw_assignments):
+        if planning_metrics is not None:
+            planning_metrics.update(
+                assignment_time_ms=assignment_logic_ns / 1_000_000,
+                routing_time_ms=(assignment_routing_ns + scheduling_routing_ns) / 1_000_000,
+                scheduling_time_ms=max(
+                    0, scheduling_finished_ns - scheduling_started_ns - scheduling_routing_ns
+                ) / 1_000_000,
+                total_planning_time_ms=(time.perf_counter_ns() - started_ns) / 1_000_000,
+            )
         return []
 
-    return [
+    assignments = [
         MultiDropletAssignment(
             droplet_id=idx,
             source=source,
@@ -186,3 +224,161 @@ def build_multi_droplet_assignments(
         )
         for idx, (source, target, path) in enumerate(raw_assignments, start=1)
     ]
+    if planning_metrics is not None:
+        total_ns = time.perf_counter_ns() - started_ns
+        planning_metrics.update(
+            assignment_time_ms=assignment_logic_ns / 1_000_000,
+            routing_time_ms=(assignment_routing_ns + scheduling_routing_ns) / 1_000_000,
+            scheduling_time_ms=max(
+                0, scheduling_finished_ns - scheduling_started_ns - scheduling_routing_ns
+            ) / 1_000_000,
+            total_planning_time_ms=total_ns / 1_000_000,
+        )
+    return assignments
+
+
+def replan_multi_assignments_after_fault(
+    assignments: Iterable[MultiDropletAssignment],
+    current_positions: Mapping[int, Cell],
+    completed_droplet_ids: Iterable[int],
+    static_obstacles: Iterable[Cell],
+    faulty_electrodes: Iterable[Cell],
+    planner: "AStarPlanner",
+) -> FaultReplanResult:
+    """Reroute every unfinished task and reschedule it around fixed completed goals."""
+    assignment_list = list(assignments)
+    completed = set(completed_droplet_ids)
+    faults = set(faulty_electrodes)
+    obstacles = set(static_obstacles) | faults
+    unfinished = [item for item in assignment_list if item.droplet_id not in completed]
+    if not unfinished:
+        return FaultReplanResult(assignment_list, "completed")
+
+    timed_planner = _TimedPlanner(planner)
+    nominal_length = 0
+    paths: list[tuple[Cell, Cell, list[Cell]]] = []
+    by_id: dict[int, tuple[Cell, list[Cell]]] = {}
+    completed_items = [item for item in assignment_list if item.droplet_id in completed]
+    merge_regions = target_merge_region_map(item.target for item in assignment_list)
+    completed_targets = [item.target for item in completed_items]
+    for assignment in unfinished:
+        start = current_positions.get(assignment.droplet_id)
+        if start is None or start in faults or assignment.target in faults:
+            return FaultReplanResult(
+                assignment_list,
+                "unreachable",
+                f"D{assignment.droplet_id} 当前格或目标格不可用",
+                nominal_remaining_length=nominal_length,
+            )
+        completed_risk = _settled_target_risk_obstacles(
+            assignment.target,
+            completed_targets,
+            merge_regions,
+        )
+        nominal_obstacles = set(static_obstacles) | completed_risk
+        nominal = planner.plan(start, assignment.target, nominal_obstacles - {start, assignment.target})
+        nominal_length += max(0, len(nominal) - 1)
+        safe_obstacles = obstacles | completed_risk
+        route = timed_planner.plan(start, assignment.target, safe_obstacles - {start, assignment.target})
+        if not route:
+            return FaultReplanResult(
+                assignment_list,
+                "unreachable",
+                f"D{assignment.droplet_id} 从 {start} 到 {assignment.target} 不可达",
+                routing_time_ms=timed_planner.elapsed_ns / 1_000_000,
+                nominal_remaining_length=nominal_length,
+            )
+        paths.append((start, assignment.target, route))
+        by_id[assignment.droplet_id] = (start, route)
+
+    max_wait_steps = 220
+    horizon = sum(len(path) + 2 * max_wait_steps + 1 for _source, _target, path in paths) + 1
+    fixed_holds = [[item.target] * horizon for item in completed_items]
+    schedule_started_ns = time.perf_counter_ns()
+    scheduled_assignments, schedules, rounds = schedule_assignments_with_reroute(
+        paths,
+        timed_planner,
+        obstacles,
+        merge_regions,
+        existing_paths=fixed_holds,
+        hold_start_during_delay=True,
+    )
+    schedule_elapsed_ns = time.perf_counter_ns() - schedule_started_ns
+    routing_ns = timed_planner.elapsed_ns
+    if not (len(schedules) == len(paths) == len(scheduled_assignments) == len(rounds)):
+        return FaultReplanResult(
+            assignment_list,
+            "protective_pause",
+            "剩余路径无法通过当前预约约束完成时序协调",
+            routing_time_ms=routing_ns / 1_000_000,
+            scheduling_time_ms=max(0, schedule_elapsed_ns - routing_ns) / 1_000_000,
+            nominal_remaining_length=nominal_length,
+        )
+
+    # Validate the whole continuation before mutating any live assignment.
+    expected_start_by_target = {assignment.target: by_id[assignment.droplet_id][0] for assignment in unfinished}
+    identity_valid = (
+        len(expected_start_by_target) == len(unfinished)
+        and {target for _source, target, _path in scheduled_assignments} == set(expected_start_by_target)
+        and all(
+            source == expected_start_by_target[target]
+            and path and path[0] == source and path[-1] == target
+            and schedule and schedule[0] == source and schedule[-1] == target
+            and all(cell is not None for cell in schedule)
+            for (source, target, path), schedule in zip(scheduled_assignments, schedules)
+        )
+    )
+    if not identity_valid:
+        return FaultReplanResult(
+            assignment_list,
+            "protective_pause",
+            "剩余调度未保持液滴身份、当前起点或连续占据",
+            routing_time_ms=routing_ns / 1_000_000,
+            scheduling_time_ms=max(0, schedule_elapsed_ns - routing_ns) / 1_000_000,
+            nominal_remaining_length=nominal_length,
+        )
+
+    scheduled_by_target = {
+        target: (path, schedule, round_index)
+        for (_source, target, path), schedule, round_index in zip(scheduled_assignments, schedules, rounds)
+    }
+    timeline = max((len(schedule) for schedule in schedules), default=1)
+    result_assignments: list[MultiDropletAssignment] = []
+    fault_length = 0
+    for assignment in assignment_list:
+        if assignment.droplet_id in completed:
+            assignment.scheduled_path = [assignment.target] * timeline
+            result_assignments.append(assignment)
+            continue
+        start, _initial_route = by_id[assignment.droplet_id]
+        route, schedule, round_index = scheduled_by_target[assignment.target]
+        assignment.source = start
+        assignment.path = route
+        assignment.scheduled_path = schedule
+        assignment.round_index = round_index
+        fault_length += max(0, len(route) - 1)
+        result_assignments.append(assignment)
+    return FaultReplanResult(
+        result_assignments,
+        "success",
+        routing_time_ms=routing_ns / 1_000_000,
+        scheduling_time_ms=max(0, schedule_elapsed_ns - routing_ns) / 1_000_000,
+        nominal_remaining_length=nominal_length,
+        fault_remaining_length=fault_length,
+    )
+
+
+class _TimedPlanner:
+    def __init__(self, planner):
+        self._planner = planner
+        self.elapsed_ns = 0
+
+    def plan(self, start, goal, obstacles=()):
+        started = time.perf_counter_ns()
+        try:
+            return self._planner.plan(start, goal, obstacles)
+        finally:
+            self.elapsed_ns += time.perf_counter_ns() - started
+
+    def __getattr__(self, name):
+        return getattr(self._planner, name)

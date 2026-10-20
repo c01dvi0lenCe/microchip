@@ -1,0 +1,226 @@
+{
+  "schema": "dmf_visual_platform_settings",
+  "version": 1,
+  "saved_at": "2026-10-06 17:12:34",
+  "operation": "多液滴",
+  "tool": "设置目标电极",
+  "mode": "仿真",
+  "settings": {
+    "start_cell": [
+      2,
+      1
+    ],
+    "goal_cell": [
+      5,
+      7
+    ],
+    "secondary_cell": [
+      1,
+      4
+    ],
+    "split_left_cell": [
+      1,
+      0
+    ],
+    "split_right_cell": [
+      1,
+      2
+    ],
+    "loaded_reservoirs": [
+      [
+        -3,
+        6
+      ],
+      [
+        -3,
+        13
+      ],
+      [
+        6,
+        -3
+      ],
+      [
+        6,
+        22
+      ],
+      [
+        13,
+        -3
+      ],
+      [
+        13,
+        22
+      ],
+      [
+        22,
+        6
+      ],
+      [
+        22,
+        13
+      ]
+    ],
+    "initial_droplet_cells": [],
+    "obstacle_cells": [
+      [
+        2,
+        3
+      ],
+      [
+        3,
+        10
+      ],
+      [
+        3,
+        14
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        4,
+        6
+      ],
+      [
+        5,
+        0
+      ],
+      [
+        6,
+        3
+      ],
+      [
+        6,
+        13
+      ],
+      [
+        8,
+        12
+      ],
+      [
+        8,
+        17
+      ],
+      [
+        9,
+        5
+      ],
+      [
+        9,
+        8
+      ],
+      [
+        11,
+        2
+      ],
+      [
+        12,
+        11
+      ],
+      [
+        13,
+        17
+      ],
+      [
+        15,
+        1
+      ],
+      [
+        15,
+        3
+      ],
+      [
+        15,
+        13
+      ],
+      [
+        17,
+        9
+      ],
+      [
+        18,
+        13
+      ]
+    ],
+    "faulty_electrodes": [],
+    "target_shape_points": [
+      [
+        6,
+        5
+      ],
+      [
+        9,
+        14
+      ],
+      [
+        15,
+        6
+      ],
+      [
+        10,
+        10
+      ],
+      [
+        17,
+        16
+      ],
+      [
+        9,
+        3
+      ],
+      [
+        4,
+        9
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    "target_shape_cells": [
+      [
+        6,
+        5
+      ],
+      [
+        9,
+        14
+      ],
+      [
+        15,
+        6
+      ],
+      [
+        10,
+        10
+      ],
+      [
+        17,
+        16
+      ],
+      [
+        9,
+        3
+      ],
+      [
+        4,
+        9
+      ],
+      [
+        16,
+        0
+      ]
+    ],
+    "loop_path_points": [],
+    "loop_path_cells": [],
+    "loop_routes": [],
+    "loop_route_index": null,
+    "loop_cycles": 3,
+    "loop_interval_s": 0.0,
+    "mixing_cycles": 2
+  },
+  "motion_profile": "理想",
+  "vision_noise": "关闭",
+  "fault_mode": "无"
+}

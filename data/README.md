@@ -11,7 +11,7 @@ Large experiment artifacts are intentionally not committed. Keep local data in:
 The canonical annotation columns are:
 
 ```text
-video_id,batch_id,frame_id,timestamp_s,mask_path,source_electrode,target_electrode,state_gt
+video_id,experiment_id,batch_id,frame_id,timestamp_s,frame_path,mask_path,source_electrode,target_electrode,state_gt,lighting_condition,notes
 ```
 
 Never place frames from the same video or experimental batch in different splits.

@@ -29,6 +29,7 @@ from controllers.electrode_transaction import ElectrodeTransactionClient
 from controllers.task_control import TaskControlMixin
 from controllers.planning_job import PlanningJobRunner
 from controllers.experiment_controller import ExperimentControllerMixin
+from dmf.recording import ElectrodeEventStream
 
 
 class STM32MatrixController(
@@ -69,6 +70,7 @@ class STM32MatrixController(
     TOOL_LOOP_SELECT = "选择循环液滴"
     TOOL_LOOP_PATH = "设置循环路径"
     TOOL_OBSTACLE = "设置障碍物"
+    TOOL_FAULT = "设置已知故障电极"
     TOOL_HARDWARE_OBSTACLE = "屏蔽故障电极"
     TOOL_MANUAL = "手动电极"
     MANUAL_TOOL_TOGGLE = "开关电极"
@@ -87,14 +89,21 @@ class STM32MatrixController(
         self.hardware_auto_owned = False
         self.active_channels = 0
         self.stop_event = threading.Event()
+        self.electrode_event_stream = ElectrodeEventStream()
         self.electrode_transactions = ElectrodeTransactionClient(
             self._send_transaction_line,
             electrode_count=self.total_channels,
             ack_timeout_s=0.45,
             max_retries=2,
+            event_observer=self.electrode_event_stream.emit,
         )
 
         self.camera_running = False
+        self.camera_recording = False
+        self.camera_recording_started_at = None
+        self.camera_recording_timer_after_id = None
+        self.camera_recording_elapsed_s = 0
+        self.latest_camera_frame_bgr = None
         self.hardware_camera_adapter = None
         self.camera_thread = None
         self.camera_after_id = None
@@ -156,6 +165,9 @@ class STM32MatrixController(
         self.loaded_reservoirs = set()
         self.initial_droplet_cells = set()
         self.obstacle_cells = set()
+        self.faulty_electrodes = set()
+        self.multi_completed_droplet_ids = set()
+        self.multi_plan_metrics = {}
         self.weak_fault_cells = set()
         self.target_shape_points = []
         self.target_shape_cells = []
@@ -172,7 +184,9 @@ class STM32MatrixController(
         self.manual_after_id = None
         self.manual_last_update_time = time.monotonic()
 
-        self.sim_camera = SimulatedCamera(self.rows, self.cols, frame_size=(520, 520))
+        self.sim_camera = SimulatedCamera(
+            self.rows, self.cols, frame_size=(520, 520), margin_px=6, layout_padding_cells=2.2
+        )
         self.detector = DropletDetector(self.sim_camera)
         self.planner = AStarPlanner(
             self.rows,
@@ -234,14 +248,21 @@ class STM32MatrixController(
             "log_text": "#2A3742",
             "electrode_fill": "#FFFFFF",
             "electrode_outline": "#C6D0D8",
-            "path": "#D9E8F8",
+            "path": "#EEF3F7",
             "obstacle": "#59646E",
             "reservoir": "#B65B4D",
             "reservoir_edge": "#7D332B",
             "reservoir_loaded": "#E68F45",
             "reservoir_loaded_edge": "#93521D",
             "initial_droplet": "#6C5CE7",
-            "target_shape": "#DCD2FF",
+            "target_shape": "#DCE9CF",
+            "target_edge": "#769657",
+            "sim_board": "#F6F9FB",
+            "sim_board_edge": "#8B9298",
+            "sim_grid": "#D8DEE3",
+            "sim_reservoir": "#D0CECA",
+            "sim_reservoir_edge": "#8D8B87",
+            "sim_reservoir_loaded": "#D5A46F",
             "target_sample": "#F5CA51",
             "droplet": "#1852C2",
             "droplet_a": "#1852C2",
@@ -253,13 +274,15 @@ class STM32MatrixController(
         self.multi_droplet_colors = [
             self.colors["droplet_a"],
             self.colors["droplet_b"],
-            "#9B4DCA",
+            "#7651A8",
             "#007B83",
-            "#C77D00",
+            "#B87412",
             "#4E7A2E",
             "#2F5F9A",
             "#7D4F2A",
         ]
+        self.multi_source_colors = {}
+        self.multi_droplet_source_colors = {}
 
         self.buttons = {eid: {"state": 0, "hover": False} for eid in range(1, self.total_channels + 1)}
 

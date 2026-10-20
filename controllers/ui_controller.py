@@ -384,6 +384,13 @@ class UiControllerMixin:
         self.btn_split_fail = self._make_button(self.debug_test_row, "分裂失败测试", self.simulate_split_failure_fault, self.colors["btn_off"], self.colors["text"])
         self.btn_split_fail.pack(side="left", padx=(6, 0))
 
+        tk.Label(self.debug_test_row, text="运行时故障电极ID", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left", padx=(12, 0))
+        self.runtime_fault_id_var = tk.StringVar(value="")
+        self.runtime_fault_id_entry = ttk.Entry(self.debug_test_row, width=6, textvariable=self.runtime_fault_id_var)
+        self.runtime_fault_id_entry.pack(side="left", padx=(5, 0))
+        self.btn_runtime_fault = self._make_button(self.debug_test_row, "注入并全局重排", self.inject_runtime_fault_from_entry, self.colors["btn_off"], self.colors["text"])
+        self.btn_runtime_fault.pack(side="left", padx=(5, 0))
+
         self.cleanup_row = tk.Frame(card, bg=self.colors["panel"])
         self.cleanup_row.pack(fill="x", padx=10, pady=(0, 8))
 
@@ -550,15 +557,16 @@ class UiControllerMixin:
             ]
         else:
             droplet_items = [("液滴", self.colors["droplet_a"], "white")]
+        simulation_view = self.is_simulation_mode()
         return droplet_items + [
             ("检测", self.colors["detected"], self.colors["text"]),
             ("路径", self.colors["path"], self.colors["text"]),
-            ("障碍", self.colors["obstacle"], "white"),
-            ("储液池", self.colors["reservoir"], self.colors["text"]),
-            ("有液池", self.colors["reservoir_loaded"], self.colors["text"]),
+            ("障碍", "#A8ADB2" if simulation_view else self.colors["obstacle"], self.colors["text"] if simulation_view else "white"),
+            ("储液池", self.colors["sim_reservoir"] if simulation_view else self.colors["reservoir"], self.colors["text"]),
+            ("有液池", self.colors["sim_reservoir_loaded"] if simulation_view else self.colors["reservoir_loaded"], self.colors["text"]),
             ("初始滴", self.colors["initial_droplet"], "white"),
-            ("目标", self.colors["target_sample"], self.colors["text"]),
-            ("激活", self.colors["btn_on"], "white"),
+            ("目标", self.colors["target_shape"] if simulation_view else self.colors["target_sample"], self.colors["text"]),
+            ("激活", "#E3EFE8" if simulation_view else self.colors["btn_on"], self.colors["text"] if simulation_view else "white"),
         ]
 
     def _refresh_matrix_legend(self, manual=False):
@@ -640,8 +648,27 @@ class UiControllerMixin:
             font=(self.font_family, 10, "bold"),
         ).pack(side="left")
 
+        self.camera_recording_timer_label = tk.Label(
+            top,
+            text="录像时长 00:00:00",
+            bg=self.colors["panel"],
+            fg=self.colors["muted"],
+            font=(self.font_family, 9),
+        )
+        self.camera_recording_timer_label.pack(side="right", padx=(0, 8))
+
         self.btn_camera = self._make_button(top, "开启预览", self.toggle_camera, self.colors["accent"], "white")
         self.btn_camera.pack(side="right")
+        self.btn_camera_record = self._make_button(
+            top, "开始录像", self.toggle_camera_recording, self.colors["muted"], "white"
+        )
+        self.btn_camera_record.pack(side="right", padx=(0, 6))
+        self.btn_camera_record.config(state="disabled")
+        self.btn_camera_photo = self._make_button(
+            top, "拍照", self.take_camera_photo, self.colors["accent"], "white"
+        )
+        self.btn_camera_photo.pack(side="right", padx=(0, 6))
+        self.btn_camera_photo.config(state="disabled")
 
         camera_container = tk.Frame(card, bg=self.colors["panel_alt"], bd=1, relief="solid")
         camera_container.pack(padx=8, pady=(0, 8))
@@ -715,12 +742,13 @@ class UiControllerMixin:
         obstacle_tool = self.TOOL_OBSTACLE if self.is_simulation_mode() else self.TOOL_HARDWARE_OBSTACLE
         operation = self.operation_var.get()
         if operation == self.OP_MULTI:
-            return (
+            options = (
                 self.TOOL_MULTI_LOAD,
                 self.TOOL_MULTI_INITIAL,
                 self.TOOL_MULTI_SHAPE,
                 obstacle_tool,
             )
+            return options + ((self.TOOL_FAULT,) if self.is_simulation_mode() else ())
         if operation == self.OP_MERGE:
             return (
                 self.TOOL_MERGE_A,

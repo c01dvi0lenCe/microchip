@@ -83,6 +83,7 @@ class DropletFeatures:
 class FrameRecord:
     run_id: str
     video_id: str
+    experiment_id: str
     batch_id: str
     split: str
     frame_id: int
@@ -104,6 +105,8 @@ class FrameRecord:
     velocity_mm_s: Optional[float]
     state_pred: str
     state_gt: str
+    lighting_condition: str
+    notes: str
     processing_time_ms: float
     pipeline_time_ms: float
     retry_count: Optional[int]

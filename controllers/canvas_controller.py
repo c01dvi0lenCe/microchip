@@ -255,6 +255,12 @@ class CanvasControllerMixin:
             return
         canvas = self.matrix_canvas
         manual_view = self._is_manual_canvas(canvas)
+        simulation_view = not manual_view and self.is_simulation_mode()
+        operation = self.operation_var.get()
+        runtime_directions = (
+            simulation_view and operation == self.OP_MULTI and self.multi_assignments
+            and (self.auto_running or self.multi_step_index > 0)
+        )
         canvas.delete("all")
         left, top, grid_w, grid_h, cell_size = self._grid_geometry()
         board_left, board_top, board_size = self._board_geometry()
@@ -263,8 +269,8 @@ class CanvasControllerMixin:
             board_top,
             board_left + board_size,
             board_top + board_size,
-            fill=self.colors["electrode_fill"],
-            outline="#7A2E86",
+            fill=self.colors["sim_board"] if simulation_view else self.colors["electrode_fill"],
+            outline=self.colors["sim_board_edge"] if simulation_view else "#7A2E86",
             width=2,
         )
 
@@ -272,28 +278,40 @@ class CanvasControllerMixin:
             for col in range(self.cols):
                 cell = (row, col)
                 if not is_reservoir_cell(cell):
-                    self._draw_cell(cell, fill=self.colors["electrode_fill"], outline=self.colors["electrode_outline"])
+                    self._draw_cell(cell, fill=self.colors["electrode_fill"], outline=self.colors["sim_grid"] if simulation_view else self.colors["electrode_outline"])
 
         for cell in sorted(RESERVOIR_CELLS):
-            self._draw_cell(cell, fill=self.colors["reservoir"], outline=self.colors["reservoir_edge"], width=2)
+            self._draw_cell(cell, fill=self.colors["sim_reservoir"] if simulation_view else self.colors["reservoir"], outline=self.colors["sim_reservoir_edge"] if simulation_view else self.colors["reservoir_edge"], width=1 if simulation_view else 2)
 
         if not manual_view:
             for cell in self.target_shape_cells:
-                self._draw_cell(cell, fill=self.colors["target_shape"], outline="#A896E8")
+                self._draw_cell(cell, fill=self.colors["target_shape"], outline=self.colors["target_edge"])
 
         for cell in sorted(self.obstacle_cells):
-            self._draw_cell(cell, fill=self.colors["obstacle"], outline="#343D45", width=2)
+            self._draw_cell(cell, fill="#A8ADB2" if simulation_view else self.colors["obstacle"], outline="#343D45", width=2)
+
+        for cell in sorted(self.faulty_electrodes):
+            self._draw_cell(cell, fill="#FBE9E8" if simulation_view else self.colors["danger"], outline="#C43C39" if simulation_view else "#6B2020", width=1 if simulation_view else 2)
+            if simulation_view:
+                x0, y0, x1, y1 = self._cell_rect(cell)
+                inset = cell_size * 0.24
+                canvas.create_line(x0 + inset, y0 + inset, x1 - inset, y1 - inset, fill="#C43C39", width=2)
+                canvas.create_line(x0 + inset, y1 - inset, x1 - inset, y0 + inset, fill="#C43C39", width=2)
 
         if not manual_view:
             paths = self.operation_paths if self.operation_paths else ([self.path] if self.path else [])
             if not paths and self.operation_var.get() == self.OP_LOOP:
                 paths = self._loop_preview_paths()
-            if self.operation_paths and self.operation_path_cells:
+            if runtime_directions:
+                paths = []
+                path_cells = set()
+            elif self.operation_paths and self.operation_path_cells:
                 path_cells = self.operation_path_cells
             else:
                 path_cells = {cell for path in paths for cell in path}
-            for cell in sorted(path_cells, key=lambda item: (item[0], item[1])):
-                self._draw_cell(cell, fill=self.colors["path"], outline="")
+            if not simulation_view:
+                for cell in sorted(path_cells, key=lambda item: (item[0], item[1])):
+                    self._draw_cell(cell, fill=self.colors["path"], outline="")
             arrow_stride = max(1, math.ceil(len(paths) / MAX_CANVAS_PATH_ARROWS)) if paths else 1
             for path_index, path in enumerate(paths):
                 if path_index % arrow_stride != 0:
@@ -301,7 +319,8 @@ class CanvasControllerMixin:
                 self._draw_path_arrow(path, self._path_arrow_color(path_index))
 
         for cell in sorted(self.loaded_reservoirs, key=lambda item: electrode_id(item[0], item[1], self.cols)):
-            self._draw_cell(cell, fill=self.colors["reservoir_loaded"], outline=self.colors["reservoir_loaded_edge"], width=3)
+            source_edge = self._multi_source_palette().get(cell, self.colors["sim_reservoir_edge"])
+            self._draw_cell(cell, fill=self.colors["sim_reservoir_loaded"] if simulation_view else self.colors["reservoir_loaded"], outline=source_edge if simulation_view else self.colors["reservoir_loaded_edge"], width=2 if simulation_view else 3)
 
         if not manual_view:
             for cell in sorted(self.initial_droplet_cells):
@@ -309,12 +328,14 @@ class CanvasControllerMixin:
 
         if not manual_view:
             for idx, cell in enumerate(self.multi_targets, start=1):
-                self._draw_cell(cell, fill=self.colors["target_sample"], outline="#8B6A13", width=2)
-                self._draw_cell_text(cell, f"T{idx}", fill="#3A2A00")
+                self._draw_cell(cell, fill=self.colors["target_shape"] if simulation_view else self.colors["target_sample"], outline=self.colors["target_edge"] if simulation_view else "#8B6A13", width=2)
+                if not simulation_view:
+                    self._draw_cell_text(cell, f"T{idx}", fill="#3A2A00")
 
         for cell in self._active_cells():
-            self._draw_cell(cell, fill=self.colors["btn_on"], outline="")
-        operation = self.operation_var.get()
+            if simulation_view and is_reservoir_cell(cell):
+                continue
+            self._draw_cell(cell, fill="#E3EFE8" if simulation_view else self.colors["btn_on"], outline="")
         if manual_view:
             self._draw_manual_electrode_ids()
             for idx, droplet in enumerate(self.manual_droplets, start=1):
@@ -343,12 +364,16 @@ class CanvasControllerMixin:
             self._draw_cell(self.current_target_cell_b, fill="", outline="#F08A24", width=3)
 
         if operation == self.OP_MULTI:
-            for idx, droplet in enumerate(self.sim_droplets, start=1):
-                if idx - 1 >= len(self.multi_droplet_visible) or not self.multi_droplet_visible[idx - 1]:
+            for idx, droplet in enumerate(self.sim_droplets):
+                position = self._multi_display_position(idx)
+                if position is None:
                     continue
-                color = self.multi_droplet_colors[(idx - 1) % len(self.multi_droplet_colors)]
-                self._draw_position_marker(droplet.position, color, radius_scale=0.34)
-                self._draw_position_text(droplet.position, str(idx), fill="white")
+                color = self._multi_assignment_color(idx)
+                self._draw_position_marker(position, color, radius_scale=0.34)
+                label = self.multi_assignments[idx].droplet_id if idx < len(self.multi_assignments) else idx + 1
+                self._draw_position_text(position, str(label), fill="white")
+            if runtime_directions:
+                self._draw_multi_action_arrows()
         elif operation == self.OP_LOOP and len(self.sim_droplets) > 1:
             for idx, droplet in enumerate(self.sim_droplets, start=1):
                 if self.multi_droplet_visible and (idx - 1 >= len(self.multi_droplet_visible) or not self.multi_droplet_visible[idx - 1]):
@@ -365,7 +390,11 @@ class CanvasControllerMixin:
                 if operation in (self.OP_MERGE, self.OP_SPLIT) and len(self.sim_droplets) > 1:
                     self._draw_position_text(droplet.position, "A" if idx == 0 else "B", fill="white")
         for detected_position in self.detected_positions:
-            self._draw_position_marker(detected_position, self.colors["detected"], radius_scale=0.18, hollow=True)
+            self._draw_position_marker(detected_position, self.colors["detected"], radius_scale=0.42 if simulation_view else 0.18, hollow=True)
+
+        if not manual_view:
+            for cell in set(self.target_shape_cells) | set(self.multi_targets):
+                self._draw_cell(cell, fill="", outline=self.colors["target_edge"], width=2)
 
         if self.hover_cell is not None:
             self._draw_cell(self.hover_cell, fill="", outline="#1F2A33", width=2)
@@ -403,7 +432,9 @@ class CanvasControllerMixin:
 
     def _path_arrow_color(self, path_index):
         operation = self.operation_var.get()
-        if operation in (self.OP_MULTI, self.OP_LOOP):
+        if operation == self.OP_MULTI:
+            return self._multi_assignment_color(path_index)
+        if operation == self.OP_LOOP:
             return self.multi_droplet_colors[path_index % len(self.multi_droplet_colors)]
         if operation in (self.OP_MERGE, self.OP_SPLIT):
             if path_index == 0:
@@ -425,45 +456,55 @@ class CanvasControllerMixin:
         self.matrix_canvas.create_line(
             *coords,
             fill=color,
-            width=max(2, int(cell_size * 0.16)),
+            width=max(1, int(cell_size * 0.075)),
             arrow=tk.LAST,
-            arrowshape=(cell_size * 0.85, cell_size * 1.05, cell_size * 0.38),
+            arrowshape=(cell_size * 0.28, cell_size * 0.34, cell_size * 0.14),
         )
+
+    def _multi_display_position(self, index):
+        if index < len(self.sim_droplets) and index < len(self.multi_droplet_visible) and self.multi_droplet_visible[index]:
+            return self.sim_droplets[index].position
+        if index < len(self.multi_assignments):
+            current = self._scheduled_cell_at(self.multi_assignments[index].scheduled_path, self.multi_step_index)
+            if current is not None and is_reservoir_cell(current):
+                return current
+        return None
+
+    def _draw_multi_action_arrows(self):
+        _, _, _, _, cell_size = self._grid_geometry()
+        for index, assignment in enumerate(self.multi_assignments):
+            position = self._multi_display_position(index)
+            if position is None:
+                continue
+            current = self._scheduled_cell_at(assignment.scheduled_path, self.multi_step_index)
+            following = self._scheduled_cell_at(assignment.scheduled_path, self.multi_step_index + 1)
+            if current is None or following is None:
+                continue
+            cx, cy = self._position_center_on_canvas(position)
+            color = self._multi_assignment_color(index)
+            if current == following:
+                if current != assignment.target:
+                    self.matrix_canvas.create_text(cx + cell_size * 0.36, cy - cell_size * 0.43, text="W", fill="#2A3742", font=("Arial", 7, "bold"), tags="wait_action")
+                continue
+            nx, ny = self._cell_center_on_canvas(following)
+            dx, dy = nx - cx, ny - cy
+            distance = math.hypot(dx, dy)
+            radius = max(4, cell_size * 0.34)
+            if distance <= radius * 1.25:
+                continue
+            ux, uy = dx / distance, dy / distance
+            length = min(cell_size * 0.72, distance)
+            self.matrix_canvas.create_line(
+                cx + ux * radius * 1.1, cy + uy * radius * 1.1,
+                cx + ux * length, cy + uy * length,
+                fill=color, width=2, arrow=tk.LAST,
+                arrowshape=(cell_size * 0.17, cell_size * 0.21, cell_size * 0.11),
+                tags="next_action",
+            )
 
     def _draw_reservoir_pad(self, cell, fill, outline, width):
         x0, y0, x1, y1 = self._cell_rect(cell)
-        self._draw_toothed_rect(x0, y0, x1, y1, fill, outline, width)
-
-    def _draw_toothed_rect(self, x0, y0, x1, y1, fill, outline, width=1):
-        size = min(max(1.0, x1 - x0), max(1.0, y1 - y0))
-        points = self._toothed_rect_points(x0, y0, x1, y1, size * 0.06)
-        flat_points = [coord for point in points for coord in point]
-        self.matrix_canvas.create_polygon(flat_points, fill=fill, outline=outline, width=width)
-
-    def _toothed_rect_points(self, x0, y0, x1, y1, amplitude):
-        width = max(1.0, x1 - x0)
-        height = max(1.0, y1 - y0)
-        teeth_x = max(4, int(width / max(2.0, amplitude)))
-        teeth_y = max(4, int(height / max(2.0, amplitude)))
-        points = []
-        for i in range(teeth_x * 2 + 1):
-            x = x0 + width * i / (teeth_x * 2)
-            y = y0 + (amplitude if i % 2 else 0)
-            points.append((x, y))
-        for i in range(1, teeth_y * 2 + 1):
-            x = x1 - (amplitude if i % 2 else 0)
-            y = y0 + height * i / (teeth_y * 2)
-            points.append((x, y))
-        for i in range(1, teeth_x * 2 + 1):
-            x = x1 - width * i / (teeth_x * 2)
-            y = y1 - (amplitude if i % 2 else 0)
-            points.append((x, y))
-        for i in range(1, teeth_y * 2 + 1):
-            x = x0 + (amplitude if i % 2 else 0)
-            y = y1 - height * i / (teeth_y * 2)
-            points.append((x, y))
-        points.append(points[0])
-        return points
+        self.matrix_canvas.create_rectangle(x0, y0, x1, y1, fill=fill, outline=outline, width=width)
 
     def _draw_corner_reservoir(self, cell, fill, outline, width):
         points = self._corner_reservoir_polygon_points(cell)
@@ -473,10 +514,8 @@ class CanvasControllerMixin:
         return
 
     def _draw_position_marker(self, position, color, radius_scale=0.3, hollow=False, shape="circle"):
-        row, col = position
-        left, top, _, _, cell_size = self._grid_geometry()
-        cx = left + (col + 0.5) * cell_size
-        cy = top + (row + 0.5) * cell_size
+        _, _, _, _, cell_size = self._grid_geometry()
+        cx, cy = self._position_center_on_canvas(position)
         radius = max(4, cell_size * radius_scale)
         fill = "" if hollow else color
         if shape == "horizontal_ellipse":
@@ -488,11 +527,15 @@ class CanvasControllerMixin:
         self.matrix_canvas.create_oval(cx - rx, cy - ry, cx + rx, cy + ry, fill=fill, outline=color, width=3)
 
     def _draw_position_text(self, position, text, fill="#1F2A33"):
+        cx, cy = self._position_center_on_canvas(position)
+        self.matrix_canvas.create_text(cx, cy, text=text, fill=fill, anchor="center", font=("Arial", 7 if len(str(text)) >= 3 else 8, "bold"))
+
+    def _position_center_on_canvas(self, position):
+        if position in RESERVOIR_CELLS:
+            return self._cell_center_on_canvas(position)
         row, col = position
         left, top, _, _, cell_size = self._grid_geometry()
-        cx = left + (col + 0.5) * cell_size
-        cy = top + (row + 0.5) * cell_size
-        self.matrix_canvas.create_text(cx, cy, text=text, fill=fill, font=(self.font_family, 8, "bold"))
+        return left + (col + 0.5) * cell_size, top + (row + 0.5) * cell_size
 
     def _draw_cell_text(self, cell, text, fill="#1F2A33"):
         x0, y0, x1, y1 = self._cell_text_rect(cell)
@@ -604,6 +647,19 @@ class CanvasControllerMixin:
             else:
                 self.obstacle_cells.add(cell)
                 self.log(f"障碍物已添加 -> {self._cell_label(cell)}")
+        elif tool == self.TOOL_FAULT:
+            if not self.is_simulation_mode() or not self._is_core_array_cell(cell):
+                self.log("已知故障电极仅支持仿真模式下的中间20x20电极")
+                return
+            self._push_undo_snapshot()
+            self._clear_planned_operation()
+            self._update_tool_options()
+            if cell in self.faulty_electrodes:
+                self.faulty_electrodes.remove(cell)
+                self.log(f"已知故障电极已移除 -> {self._cell_label(cell)}")
+            else:
+                self.faulty_electrodes.add(cell)
+                self.log(f"已知故障电极已标记 -> {self._cell_label(cell)}")
         elif tool == self.TOOL_MULTI_LOAD:
             if not is_reservoir_cell(cell):
                 self.log("设置储液池时请点击四周储液池")

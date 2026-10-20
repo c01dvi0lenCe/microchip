@@ -11,6 +11,8 @@ from .contracts import (
 )
 from .electrode_map import ElectrodeMap, ElectrodeRegion
 from .features import DropletFeatureExtractor
+from .overlay import render_electrode_overlay
+from .timeseries import export_transport_timeseries
 from .simulation import DropletDetector, SimulatedCamera, detection_in_cell
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "VisionAlgorithm",
     "VisionResult",
     "detection_in_cell",
+    "export_transport_timeseries",
+    "render_electrode_overlay",
 ]

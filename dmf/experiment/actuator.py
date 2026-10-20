@@ -18,8 +18,11 @@ class DeadlineTransactionClient(ElectrodeTransactionClient):
                 if self.cancelled():return None
                 remaining=deadline-time.monotonic()
                 if remaining<=0:return None
-                for line in self._messages[cursor:]:
-                    if predicate(line):return line
+                for index in range(cursor,len(self._messages)):
+                    line=self._messages[index]
+                    if predicate(line):
+                        self._matched_time=self._message_times[index]
+                        return line
                 self._condition.wait(min(remaining,.05))
 
 
@@ -31,6 +34,7 @@ class SerialTransport:
         self.emergency=config.get('_emergency',lambda:False)
         self.port=serial.Serial(cfg['port'],cfg['baudrate'],timeout=.05,write_timeout=cfg['ack_timeout_s'])
         self.client=DeadlineTransactionClient(self._send,ack_timeout_s=cfg['ack_timeout_s'],max_retries=cfg['max_retries'],
+            event_observer=config.get('_transaction_observer'),
             deadline_provider=lambda:self.deadline or float('inf'),
             cancelled=lambda:not self.releasing and (self.emergency() or bool(self.error)))
         self.reader=threading.Thread(target=self._read,daemon=True);self.reader.start()

@@ -6,7 +6,9 @@ from dataclasses import dataclass
 import secrets
 import threading
 import time
+import uuid
 from collections.abc import Callable, Mapping
+from dmf.recording import clock_stamp
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class ElectrodeTransactionClient:
         ack_timeout_s: float = 0.35,
         max_retries: int = 2,
         initial_sequence: int | None = None,
+        event_observer: Callable[[dict], None] | None = None,
     ):
         self._send_line = send_line
         self.electrode_count = electrode_count
@@ -41,6 +44,35 @@ class ElectrodeTransactionClient:
         self._condition = threading.Condition()
         self._messages: list[str] = []
         self._transaction_lock = threading.Lock()
+        self.event_observer = event_observer
+        self.observer_error = ''
+        self._message_times = []
+        self._matched_time = None
+        self._request_id = ''
+        self._sequence = ''
+        self._attempt = 0
+
+    def _emit(self, event, *, stamp=None, **fields):
+        payload = dict(event=event, **(stamp or clock_stamp()),
+            request_id=self._request_id, sequence=self._sequence, attempt=self._attempt, **fields)
+        if self.event_observer is not None:
+            try:
+                self.event_observer(payload)
+            except Exception as exc:
+                # Observability must never prevent electrical release.
+                self.observer_error = str(exc)
+
+    def _send_observed(self, line):
+        self._emit('send_requested', line=line)
+        try:
+            ok = self._send_line(line)
+        except Exception as exc:
+            self._emit('send_result', line=line, sent=False, error=str(exc))
+            if line == 'ALL_OFF':
+                self._emit('all_off_failed', error=str(exc))
+            raise
+        self._emit('send_result', line=line, sent=bool(ok))
+        return ok
 
     def feed_line(self, line: str) -> bool:
         """Route one serial line into the ACK waiter.
@@ -52,8 +84,11 @@ class ElectrodeTransactionClient:
         line = line.strip()
         if not (line.startswith("ACK:") or line.startswith("ERR:")):
             return False
+        stamp = clock_stamp()
+        self._emit('received', stamp=stamp, line=line)
         with self._condition:
             self._messages.append(line)
+            self._message_times.append(stamp)
             self._condition.notify_all()
         return True
 
@@ -63,14 +98,31 @@ class ElectrodeTransactionClient:
             self._clear_messages()
             sequence = self._next_sequence
             self._next_sequence += 1
-            return self._apply_sequence(sequence, normalized)
+            self._request_id = uuid.uuid4().hex
+            self._sequence = sequence
+            self._attempt = 0
+            self._emit('transaction_requested', changes=normalized)
+            try:
+                result = self._apply_sequence(sequence, normalized)
+            except Exception as exc:
+                self._emit('transaction_failed', changes=normalized, error=str(exc))
+                raise
+            self._emit('applied' if result.applied else 'transaction_failed',
+                stamp=self._matched_time if result.applied else None,
+                changes=normalized, error=result.error)
+            return result
 
     def all_off(self) -> bool:
         with self._transaction_lock:
             self._clear_messages()
-            for _ in range(self.max_retries + 1):
+            self._request_id = uuid.uuid4().hex
+            self._sequence = 'ALL_OFF'
+            self._attempt = 0
+            self._emit('all_off_requested')
+            for attempt in range(1, self.max_retries + 2):
+                self._attempt = attempt
                 cursor = self._message_cursor()
-                if not self._send_line("ALL_OFF"):
+                if not self._send_observed("ALL_OFF"):
                     continue
                 response = self._wait_for(
                     cursor,
@@ -78,14 +130,17 @@ class ElectrodeTransactionClient:
                 )
                 if response == "ACK:ALL_OFF":
                     self._next_sequence = 1
+                    self._emit('all_off_confirmed', stamp=self._matched_time)
                     return True
+            self._emit('all_off_failed', error='ALL_OFF acknowledgement failed')
             return False
 
     def _apply_sequence(self, sequence: int, changes: dict[int, int]) -> TransactionResult:
         last_error = "ACK timeout"
         for attempt in range(1, self.max_retries + 2):
+            self._attempt = attempt
             begin_cursor = self._message_cursor()
-            if not self._send_line(f"BEGIN:{sequence}"):
+            if not self._send_observed(f"BEGIN:{sequence}"):
                 last_error = "serial send failed"
                 continue
 
@@ -115,7 +170,7 @@ class ElectrodeTransactionClient:
             sent_all = True
             for electrode_id, state in sorted(changes.items()):
                 set_cursor = self._message_cursor()
-                if not self._send_line(f"SET:{electrode_id}:{state}"):
+                if not self._send_observed(f"SET:{electrode_id}:{state}"):
                     sent_all = False
                     last_error = f"SET:{electrode_id} send failed"
                     break
@@ -132,7 +187,7 @@ class ElectrodeTransactionClient:
                 continue
 
             commit_cursor = self._message_cursor()
-            if not self._send_line(f"COMMIT:{sequence}"):
+            if not self._send_observed(f"COMMIT:{sequence}"):
                 last_error = "COMMIT send failed"
                 continue
             commit_reply = self._wait_for(
@@ -149,8 +204,10 @@ class ElectrodeTransactionClient:
         deadline = time.monotonic() + self.ack_timeout_s
         with self._condition:
             while True:
-                for line in self._messages[cursor:]:
+                for index in range(cursor, len(self._messages)):
+                    line = self._messages[index]
                     if predicate(line):
+                        self._matched_time = self._message_times[index]
                         return line
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -164,6 +221,8 @@ class ElectrodeTransactionClient:
     def _clear_messages(self) -> None:
         with self._condition:
             self._messages.clear()
+            self._message_times.clear()
+            self._matched_time = None
 
     def reset_sequence(self, sequence: int = 1) -> None:
         if sequence < 1:

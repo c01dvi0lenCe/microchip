@@ -13,6 +13,7 @@ from .common import (
     SimulatedDroplet,
     StepEvent,
     VisionNoiseProfile,
+    electrode_id,
     csv,
     filedialog,
     math,
@@ -93,8 +94,15 @@ class SimulationControllerMixin:
 
     def _record_metric_replan(self):
         if self.operation_metrics is not None:
-            self.operation_metrics.record_replan()
+            self.operation_metrics.record_deviation_replan()
             self._refresh_metrics_label()
+
+    def _mark_operation_success(self):
+        if self.operation_metrics is None:
+            return
+        self.operation_metrics.success = True
+        self.operation_metrics.planning_status = "completed"
+        self._refresh_metrics_label()
 
     def _record_metric_dropout(self):
         if self.operation_metrics is not None:
@@ -142,17 +150,7 @@ class SimulationControllerMixin:
         rows = [metrics.to_csv_row() for metrics in self.operation_metrics_history]
         if self.operation_metrics is not None and self.operation_metrics not in self.operation_metrics_history:
             rows.append(self.operation_metrics.to_csv_row())
-        fieldnames = [
-            "operation",
-            "success",
-            "total_steps",
-            "average_step_time_s",
-            "replan_count",
-            "dropout_count",
-            "stall_count",
-            "split_failure_count",
-            "electrode_switch_count",
-        ]
+        fieldnames = list(rows[0]) if rows else list(OperationMetrics(operation="").to_csv_row())
         with path.open("w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
@@ -213,6 +211,32 @@ class SimulationControllerMixin:
         color = color.lstrip("#")
         return tuple(int(color[index : index + 2], 16) for index in (0, 2, 4))
 
+    def _multi_source_palette(self):
+        if self.multi_source_colors:
+            return self.multi_source_colors
+        sources = set(self.loaded_reservoirs) | set(self.initial_droplet_cells)
+        sources.update(a.source for a in self.multi_assignments)
+        return {
+            source: self.multi_droplet_colors[index % len(self.multi_droplet_colors)]
+            for index, source in enumerate(sorted(sources, key=lambda cell: electrode_id(*cell)))
+        }
+
+    def _capture_multi_source_colors(self):
+        self.multi_source_colors = {}
+        self.multi_source_colors = self._multi_source_palette()
+        self.multi_droplet_source_colors = {
+            a.droplet_id: self.multi_source_colors[a.source] for a in self.multi_assignments
+        }
+
+    def _multi_assignment_color(self, index):
+        if index >= len(self.multi_assignments):
+            return self.multi_droplet_colors[index % len(self.multi_droplet_colors)]
+        assignment = self.multi_assignments[index]
+        # Runtime replanning changes source to the current cell; retain provenance.
+        if assignment.droplet_id not in self.multi_droplet_source_colors:
+            self.multi_droplet_source_colors[assignment.droplet_id] = self._multi_source_palette()[assignment.source]
+        return self.multi_droplet_source_colors[assignment.droplet_id]
+
     def _camera_droplet_colors(self):
         if self.operation_var.get() == self.OP_MULTI:
             if not self.multi_assignments:
@@ -222,7 +246,7 @@ class SimulationControllerMixin:
                     for idx in range(count)
                 ]
             return [
-                self._hex_to_rgb(self.multi_droplet_colors[idx % len(self.multi_droplet_colors)])
+                self._hex_to_rgb(self._multi_assignment_color(idx))
                 for idx, visible in enumerate(self.multi_droplet_visible)
                 if visible
             ]
@@ -397,6 +421,7 @@ class SimulationControllerMixin:
                 for cell in path
             }
         return {
+            "paper_style": True,
             "droplet_position": visible_positions[0] if visible_positions else self.sim_droplet.position,
             "obstacles": self.obstacle_cells,
             "path": preview_path_cells,
@@ -434,6 +459,8 @@ class SimulationControllerMixin:
         self.current_target_cell = None
         self.current_target_cell_b = None
         self.multi_assignments = []
+        self.multi_source_colors = {}
+        self.multi_droplet_source_colors = {}
         self.multi_targets = []
         self.multi_droplet_visible = []
         self.multi_step_index = 0

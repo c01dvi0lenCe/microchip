@@ -54,6 +54,8 @@ class VisionFrameworkTests(unittest.TestCase):
         self.assertEqual((self.electrode_map[400].row, self.electrode_map[400].col), (19, 19))
         self.assertEqual((self.electrode_map[401].row, self.electrode_map[401].col), (-1, 6))
         self.assertEqual((self.electrode_map[420].row, self.electrode_map[420].col), (20, -1))
+        self.assertEqual(self.electrode_map[1].geometry_type, "core_rectangle")
+        self.assertEqual(self.electrode_map[417].geometry_type, "peripheral_corner_l")
         self.assertEqual({region.electrode_id for region in self.electrode_map}, set(range(1, 421)))
 
     def test_corner_electrode_is_l_shaped_and_has_three_cell_area(self):
@@ -201,6 +203,58 @@ class VisionFrameworkTests(unittest.TestCase):
         fixture = Path(__file__).parent / "fixtures" / "vision"
         counts = validate_dataset(fixture / "dataset.csv", fixture / "annotations.csv")
         self.assertEqual(counts, {"videos": 1, "batches": 1, "annotations": 1})
+
+    def test_dataset_validator_rejects_missing_timestamp_and_mask_size_mismatch(self):
+        fixture = Path(__file__).parent / "fixtures" / "vision"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("frame_000.png", "mask_000.png"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            (root / "dataset.csv").write_text(
+                "video_id,batch_id,video_path,split\nv1,b1,v1.avi,test\n", encoding="utf-8"
+            )
+            header = (
+                "video_id,experiment_id,batch_id,frame_id,timestamp_s,frame_path,mask_path,"
+                "source_electrode,target_electrode,state_gt,lighting_condition,notes\n"
+            )
+            (root / "annotations.csv").write_text(
+                header + "v1,e1,b1,0,,frame_000.png,mask_000.png,1,2,Partial,uniform,\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "missing timestamp"):
+                validate_dataset(root / "dataset.csv", root / "annotations.csv")
+
+            bad_mask = np.zeros((10, 10), dtype=np.uint8)
+            cv2.imwrite(str(root / "bad_mask.png"), bad_mask)
+            (root / "annotations.csv").write_text(
+                header + "v1,e1,b1,0,0.0,frame_000.png,bad_mask.png,1,2,Partial,uniform,\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "mask size"):
+                validate_dataset(root / "dataset.csv", root / "annotations.csv")
+
+    def test_dataset_validator_rejects_duplicate_frame_content(self):
+        fixture = Path(__file__).parent / "fixtures" / "vision"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("frame_000.png", "mask_000.png"):
+                (root / name).write_bytes((fixture / name).read_bytes())
+            (root / "frame_001.png").write_bytes((fixture / "frame_000.png").read_bytes())
+            (root / "dataset.csv").write_text(
+                "video_id,batch_id,video_path,split\nv1,b1,v1.avi,test\n", encoding="utf-8"
+            )
+            header = (
+                "video_id,experiment_id,batch_id,frame_id,timestamp_s,frame_path,mask_path,"
+                "source_electrode,target_electrode,state_gt,lighting_condition,notes\n"
+            )
+            (root / "annotations.csv").write_text(
+                header
+                + "v1,e1,b1,0,0.0,frame_000.png,mask_000.png,1,2,Partial,uniform,\n"
+                + "v1,e1,b1,1,0.1,frame_001.png,mask_000.png,1,2,Partial,uniform,\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "duplicate frame content"):
+                validate_dataset(root / "dataset.csv", root / "annotations.csv")
 
 
 if __name__ == "__main__":

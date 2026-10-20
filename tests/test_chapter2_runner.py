@@ -131,30 +131,38 @@ class RunnerTests(unittest.TestCase):
     def test_pre_recovery_frame_does_not_confirm_recovery(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)
-            config=make_inputs(root,[],mode='dry_run',source={'backend':'opencv','frame_timeout_s':2},
+            config=make_inputs(root,[],mode='dry_run',source={'backend':'opencv','frame_timeout_s':60},
                 segmentation={'name':'unet','model_path':'unused-test-only.onnx'})
+            captured_before_recovery_apply=[]
+            start_apply_time=[]
             def frame(x,y,index,t):
                 image=np.full((400,400,3),255,np.uint8);cv2.circle(image,(x,y),6,(0,0,0),-1)
                 return FramePacket('test',index,t,'test',image)
             class Source:
                 def __iter__(self):
                     yield frame(190,190,0,time.monotonic())
+                    while not start_apply_time or time.monotonic()<=start_apply_time[0]+.005:
+                        time.sleep(.001)
                     t=time.monotonic()
                     yield frame(215,160,1,t)
-                    yield frame(190,190,2,t+.001)
+                    yield frame(190,190,2,captured_before_recovery_apply[0])
                 def close(self):pass
             from dmf.experiment.actuator import AMActuator
             class Actuator(AMActuator):
                 def execute(self,d):
-                    if d.action=='Recovery':time.sleep(.02)
-                    return super().execute(d)
+                    if d.action=='Recovery':
+                        captured_before_recovery_apply.append(time.monotonic())
+                        time.sleep(.05)
+                    result=super().execute(d)
+                    if d.action=='Start':start_apply_time.append(time.monotonic())
+                    return result
             run_experiment(config,source_factory=lambda c:Source(),
                 segmenter_factory=lambda c:ThresholdSegmenter(ThresholdConfig(color_space='gray',lower=(0,),upper=(100,))),
                 actuator_factory=Actuator)
             rows=read_rows(root/'results/frames.csv')
-            self.assertEqual(rows[1]['event_action'],'Recovery')
-            self.assertEqual(rows[2]['event_action'],'Hold')
-            self.assertEqual(rows[2]['error'],'PRE_ACTUATION_FRAME')
+            self.assertEqual(rows[1]['event_action'],'Recovery',rows[1])
+            self.assertEqual(rows[2]['event_action'],'Hold',rows[2])
+            self.assertEqual(rows[2]['error'],'PRE_ACTUATION_FRAME',rows[2])
 
     def test_visual_step_success_survives_next_target_command_failure(self):
         with tempfile.TemporaryDirectory() as td:

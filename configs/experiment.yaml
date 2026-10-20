@@ -1,6 +1,7 @@
 run_id: pilot-threshold-example
 video:
   video_id: pilot_e10_10_to_e10_11
+  experiment_id: pilot_transport_horizontal_01
   batch_id: pilot_batch_01
   split: test
   path: ../data/raw_videos/pilot.mp4

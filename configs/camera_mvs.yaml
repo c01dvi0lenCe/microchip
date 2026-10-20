@@ -1,0 +1,11 @@
+camera_model: MV-CS200-10UC
+lens_model: MVL-KF2524M-25MP
+connection: USB3
+source:
+  backend: plugin
+  factory: dmf.experiment.mvs_camera:open_camera
+  frame_timeout_s: 0.5
+  startup_timeout_s: 10.0
+  parameters:
+    serial_number: DB2915340
+    sdk_python_path: 'E:/工业相机驱动/setup/MVS/Development/Samples/Python/MvImport'

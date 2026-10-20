@@ -17,6 +17,17 @@ class MultiDropletAssignment:
 
 
 @dataclass
+class FaultReplanResult:
+    assignments: list[MultiDropletAssignment]
+    status: str
+    reason: str = ""
+    routing_time_ms: float = 0.0
+    scheduling_time_ms: float = 0.0
+    nominal_remaining_length: int = 0
+    fault_remaining_length: int = 0
+
+
+@dataclass
 class Detection:
     grid_position: GridPosition
     cell: Cell

@@ -145,6 +145,7 @@ class PersistenceControllerMixin:
             "loaded_reservoirs": self._serialize_cells(snapshot["loaded_reservoirs"]),
             "initial_droplet_cells": self._serialize_cells(snapshot["initial_droplet_cells"]),
             "obstacle_cells": self._serialize_cells(snapshot["obstacle_cells"]),
+            "faulty_electrodes": self._serialize_cells(snapshot.get("faulty_electrodes", set())),
             "target_shape_points": [self._serialize_cell(cell) for cell in snapshot["target_shape_points"]],
             "target_shape_cells": [self._serialize_cell(cell) for cell in snapshot["target_shape_cells"]],
             "loop_path_points": [self._serialize_cell(cell) for cell in snapshot["loop_path_points"]],
@@ -173,6 +174,7 @@ class PersistenceControllerMixin:
             "loaded_reservoirs": set(self._deserialize_cells(data.get("loaded_reservoirs", []))),
             "initial_droplet_cells": set(self._deserialize_cells(data.get("initial_droplet_cells", []))),
             "obstacle_cells": set(self._deserialize_cells(data.get("obstacle_cells", []))),
+            "faulty_electrodes": set(self._deserialize_cells(data.get("faulty_electrodes", []))),
             "target_shape_points": self._deserialize_cells(data.get("target_shape_points", [])),
             "target_shape_cells": self._deserialize_cells(data.get("target_shape_cells", [])),
             "loop_path_points": self._deserialize_cells(data.get("loop_path_points", [])),
@@ -210,6 +212,7 @@ class PersistenceControllerMixin:
             "loaded_reservoirs": set(self.loaded_reservoirs),
             "initial_droplet_cells": set(self.initial_droplet_cells),
             "obstacle_cells": set(self.obstacle_cells),
+            "faulty_electrodes": set(self.faulty_electrodes),
             "target_shape_points": list(self.target_shape_points),
             "target_shape_cells": list(self.target_shape_cells),
             "loop_path_points": list(self.loop_path_points),
@@ -248,6 +251,7 @@ class PersistenceControllerMixin:
         self.loaded_reservoirs = set(snapshot["loaded_reservoirs"])
         self.initial_droplet_cells = set(snapshot["initial_droplet_cells"])
         self.obstacle_cells = set(snapshot["obstacle_cells"])
+        self.faulty_electrodes = set(snapshot.get("faulty_electrodes", set()))
         self.target_shape_points = list(snapshot["target_shape_points"])
         self.target_shape_cells = list(snapshot["target_shape_cells"])
         self.loop_routes = [

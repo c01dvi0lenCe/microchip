@@ -9,6 +9,10 @@ from .evaluation import evaluate_results
 from .image_io import write_image
 from .pipeline import run_baseline
 from .timebase import VideoTimestampResolver
+from .config import load_electrode_map, save_electrode_map
+from .overlay import render_electrode_overlay
+from .timeseries import export_transport_timeseries
+from ..recording import load_recorded_timestamps
 
 try:
     import cv2
@@ -41,11 +45,21 @@ def extract_frames(
     saved = 0
     timestamps = VideoTimestampResolver(fps)
     try:
+        recorded_times = load_recorded_timestamps(video_path)
+        if recorded_times is not None and len(recorded_times) != int(cap.get(cv2.CAP_PROP_FRAME_COUNT)):
+            raise ValueError('video frame count does not match recorded timestamps')
         while max_frames is None or saved < max_frames:
             ok, frame = cap.read()
             if not ok:
+                if recorded_times is not None and frame_id < len(recorded_times):
+                    raise ValueError('video decode ended before recorded timestamps')
                 break
-            timestamp_s, timestamp_source = timestamps.resolve(frame_id, cap.get(cv2.CAP_PROP_POS_MSEC))
+            if recorded_times is not None:
+                if frame_id >= len(recorded_times):
+                    raise ValueError('video has extra frames without timestamps')
+                timestamp_s, timestamp_source = recorded_times[frame_id], 'host_receive_perf_counter'
+            else:
+                timestamp_s, timestamp_source = timestamps.resolve(frame_id, cap.get(cv2.CAP_PROP_POS_MSEC))
             if frame_id % every_n == 0:
                 relative = Path("frames") / f"{video_id}_{frame_id:06d}.png"
                 path = output_dir / relative
@@ -94,6 +108,26 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--ground-truth", required=True, type=Path)
     evaluate.add_argument("--output-dir", required=True, type=Path)
     evaluate.add_argument("--boundary-tolerance-px", type=int, default=2)
+    evaluate.add_argument("--electrode-map", type=Path)
+
+    overlay = subparsers.add_parser("render-map", help="Overlay all 420 electrode polygons on a real chip image")
+    overlay.add_argument("--image", required=True, type=Path)
+    overlay.add_argument("--electrode-map", required=True, type=Path)
+    overlay.add_argument("--output", required=True, type=Path)
+    overlay.add_argument("--show-row-col", action="store_true")
+    overlay.add_argument("--zoom-electrodes", default="")
+    overlay.add_argument("--zoom-dir", type=Path)
+    overlay.add_argument("--crop-padding-px", type=int, default=24)
+
+    export_map = subparsers.add_parser("export-map", help="Save a calibrated electrode map as YAML or JSON")
+    export_map.add_argument("--input", required=True, type=Path)
+    export_map.add_argument("--output", required=True, type=Path)
+
+    timeseries = subparsers.add_parser("export-timeseries", help="Export one transport sequence for plotting")
+    timeseries.add_argument("--results", required=True, type=Path)
+    timeseries.add_argument("--output", required=True, type=Path)
+    timeseries.add_argument("--video-id")
+    timeseries.add_argument("--experiment-id")
     return parser
 
 
@@ -123,8 +157,33 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.ground_truth,
                 args.output_dir,
                 args.boundary_tolerance_px,
+                args.electrode_map,
             )
             print(f"matched_frames={summary['matched_frames']} output={args.output_dir}")
+        elif args.command == "render-map":
+            electrode_map = load_electrode_map(args.electrode_map)
+            selected = [int(value) for value in args.zoom_electrodes.split(",") if value.strip()]
+            outputs = render_electrode_overlay(
+                args.image,
+                electrode_map,
+                args.output,
+                args.show_row_col,
+                selected,
+                args.zoom_dir,
+                args.crop_padding_px,
+            )
+            print(f"overlay={outputs[0]} crops={len(outputs) - 1}")
+        elif args.command == "export-map":
+            save_electrode_map(args.output, load_electrode_map(args.input))
+            print(f"electrode_map={args.output}")
+        elif args.command == "export-timeseries":
+            path = export_transport_timeseries(
+                args.results,
+                args.output,
+                args.video_id,
+                args.experiment_id,
+            )
+            print(f"timeseries={path}")
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         parser.error(str(exc))
     return 0

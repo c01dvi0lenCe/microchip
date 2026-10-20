@@ -69,8 +69,28 @@ OpenCV 可识别的工业相机用 `source.backend: opencv` 和 `device`。
 `source.parameters` 字典，返回含 `read(timeout_s)` 和 `close()` 的对象。
 `read` 必须返回新的 H×W×3 uint8 BGR 帧；SDK 应启用其自身超时和丢弃旧缓存能力。
 采集工作线程使用单帧最新值队列，主循环具有 `frame_timeout_s` 超时；不接受积压旧帧。
-`timestamp` 是主机读取完成时的 monotonic 秒，不宣称是相机曝光时间。
+`timestamp` 是主机接收时间的 monotonic 秒，不宣称是相机曝光时间。
+MVS取流保存GetImageBuffer成功返回时的接收时间（在颜色转换前）；其他插件未提供该元数据时，
+继续使用read返回时的主机时间。新录像逐帧时间表可用于offline回放；详见`docs/camera-dataset.md`。
 SDK 插件须保证 read/close 有界；未提供厂商 SDK 时不能声称已连接该相机。
+
+本机 Hikrobot MV-CS200-10UC 的原始取流预览配置位于 `configs/camera_mvs.yaml`。
+在旧界面的“实物”模式点击“开启预览”即可验证 USB3/MVS 连接；这只显示原始图像，不运行 U-Net、
+不控制电极，也不代表实验已开始。MVS 客户端正在实时取流时，请先停止其取流，再由上位机独占打开相机。
+MVS SDK `MvImport` 目录通过配置中的 `sdk_python_path` 指定；若 SDK 安装位置变化，更新该项。
+实物预览时可在“视觉反馈”旁使用“开始录像/停止录像”，视频自动保存到
+`D:\I\ZJU\有源矩阵\视觉-工业相机\视频`，格式为 MVS SDK AVI；“拍照”将当前全分辨率帧保存到同级`照片`目录，格式为 PNG。
+若目标文件已存在，上位机会自动追加 `_001`、`_002` 等编号，不覆盖旧录像或失败残留文件。
+录像逐帧送入 SDK、拍照文件写入都在后台线程执行，界面异步轮询完成状态；预览队列仍只保留最新帧。
+关闭预览会在后台请求停止录像并封装文件。录制帧率受相机实际输出及主机磁盘/USB3性能限制，
+开始实验前建议先短录并检查 AVI 是否能正常播放及帧率是否满足需要。
+新录像同目录同时保存`.timestamps.csv`、`.electrodes.csv`、`.frame_electrodes.csv`和
+`.recording.json`。AVI标称播放帧率与接收节奏分开保存，不再用播放时间替代真实接收间隔。
+停止录像会核对帧数并完成电极状态对齐；队列溢出/写入失败会标记不完整，关闭窗口会等待后台保存。
+第二章experiment另保存`electrode_events.csv`，记录串口发送及实际接收ACK时刻；
+原`commands.csv`中的时间是触发决策的帧时间。offline/dry_run不会生成真实硬件事件。
+后续 Chapter 2 `dry_run` 可将同一 `factory` 和 `parameters` 配置复制到所选实验 YAML 的 `source` 下，
+但仍须准备正式 U-Net 模型后才能运行完整视觉实验。
 
 ### AM 和停止
 

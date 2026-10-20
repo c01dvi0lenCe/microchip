@@ -17,6 +17,7 @@ from .dataset import read_csv_rows, write_csv_rows
 from .features import DropletFeatureExtractor
 from .image_io import write_image
 from .timebase import VideoTimestampResolver
+from ..recording import load_recorded_timestamps
 
 try:
     import cv2
@@ -44,6 +45,7 @@ def run_baseline(config_path: Path) -> tuple[Path, Path]:
     mask_dir.mkdir(parents=True, exist_ok=True)
 
     video_id = str(_required(video_config, "video_id"))
+    experiment_id = str(video_config.get("experiment_id") or video_id)
     batch_id = str(_required(video_config, "batch_id"))
     split = str(_required(video_config, "split"))
     algorithm_name = str(_required(algorithm_config, "name"))
@@ -82,11 +84,23 @@ def run_baseline(config_path: Path) -> tuple[Path, Path]:
     frame_id = start_frame
     processed = 0
     try:
+        explicit_times = video_config.get('timestamps_csv')
+        recorded_times = load_recorded_timestamps(video_path,
+            resolve_path(base_dir, explicit_times) if explicit_times else None)
+        if recorded_times is not None and len(recorded_times) != int(cap.get(cv2.CAP_PROP_FRAME_COUNT)):
+            raise ValueError('video frame count does not match recorded timestamps')
         while max_frames is None or processed < max_frames:
             ok, image = cap.read()
             if not ok:
+                if recorded_times is not None and frame_id < len(recorded_times):
+                    raise ValueError('video decode ended before recorded timestamps')
                 break
-            timestamp_s, timestamp_source = timestamps.resolve(frame_id, cap.get(cv2.CAP_PROP_POS_MSEC))
+            if recorded_times is not None:
+                if frame_id >= len(recorded_times):
+                    raise ValueError('video has extra frames without timestamps')
+                timestamp_s, timestamp_source = recorded_times[frame_id], 'host_receive_perf_counter'
+            else:
+                timestamp_s, timestamp_source = timestamps.resolve(frame_id, cap.get(cv2.CAP_PROP_POS_MSEC))
             packet = FramePacket(video_id, frame_id, timestamp_s, timestamp_source, image)
             pipeline_started = time.perf_counter()
             result = algorithm.process(packet)
@@ -113,6 +127,7 @@ def run_baseline(config_path: Path) -> tuple[Path, Path]:
             record = FrameRecord(
                 run_id=run_id,
                 video_id=video_id,
+                experiment_id=str(annotation.get("experiment_id") or experiment_id),
                 batch_id=batch_id,
                 split=split,
                 frame_id=frame_id,
@@ -134,6 +149,8 @@ def run_baseline(config_path: Path) -> tuple[Path, Path]:
                 velocity_mm_s=features.velocity_mm_s,
                 state_pred=DropletState.UNKNOWN.value,
                 state_gt=DropletState.parse(annotation.get("state_gt")).value,
+                lighting_condition=str(annotation.get("lighting_condition") or ""),
+                notes=str(annotation.get("notes") or ""),
                 processing_time_ms=result.processing_time_ms,
                 pipeline_time_ms=pipeline_ms,
                 retry_count=_optional_int(annotation.get("retry_count")),

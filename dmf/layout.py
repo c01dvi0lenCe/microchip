@@ -20,6 +20,8 @@ DROPLET_DETECTION_RGB = (
     (78, 122, 46),
     (47, 95, 154),
     (125, 79, 42),
+    (118, 81, 168),
+    (184, 116, 18),
 )
 DROPLET_DETECTION_TOLERANCE = 30
 

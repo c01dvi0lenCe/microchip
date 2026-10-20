@@ -36,11 +36,13 @@ class SimulatedCamera:
         cols: int = GRID_COLS,
         frame_size: tuple[int, int] = (720, 720),
         margin_px: int = 18,
+        layout_padding_cells: float = CAMERA_LAYOUT_PADDING_CELLS,
     ):
         self.rows = rows
         self.cols = cols
         self.frame_size = frame_size
         self.margin_px = margin_px
+        self.layout_padding_cells = layout_padding_cells
 
     def render(
         self,
@@ -58,6 +60,7 @@ class SimulatedCamera:
         droplet_colors: Optional[Iterable[tuple[int, int, int]]] = None,
         droplet_shapes: Optional[Iterable[str]] = None,
         noise_profile: Optional[VisionNoiseProfile] = None,
+        paper_style: bool = False,
     ) -> np.ndarray:
         width, height = self.frame_size
         frame = np.full((height, width, 3), (255, 255, 255), dtype=np.uint8)
@@ -66,20 +69,29 @@ class SimulatedCamera:
         grid_w_px = cell_size * self.cols
         grid_h_px = cell_size * self.rows
 
-        self._fill_cells(frame, RESERVOIR_CELLS, (182, 91, 77), outline_color=(125, 51, 43))
-        self._fill_cells(frame, loaded_reservoirs, (230, 143, 69), outline_color=(147, 82, 29))
-        self._fill_cells(frame, target_shape_cells, (231, 221, 255))
-        self._fill_cells(frame, path, (226, 239, 255))
-        self._fill_cells(frame, target_cells, (248, 208, 89))
-        self._fill_cells(frame, active_cells, (151, 216, 189))
-        self._fill_cells(frame, obstacles, (89, 100, 110))
+        target_shape_cells = tuple(target_shape_cells)
+        target_cells = tuple(target_cells)
+        if paper_style:
+            active_cells = [cell for cell in active_cells if 0 <= cell[0] < self.rows and 0 <= cell[1] < self.cols]
+        if paper_style:
+            padding = 2.2 * cell_size
+            self._fill_rect_px(frame, (left - padding, top - padding, left + grid_w_px + padding, top + grid_h_px + padding), (246, 249, 251), (139, 146, 152))
+            self._fill_rect_px(frame, (left, top, left + grid_w_px, top + grid_h_px), (255, 255, 255))
+        self._fill_cells(frame, RESERVOIR_CELLS, (208, 206, 202) if paper_style else (182, 91, 77), outline_color=(141, 139, 135) if paper_style else (125, 51, 43))
+        self._fill_cells(frame, loaded_reservoirs, (213, 164, 111) if paper_style else (230, 143, 69), outline_color=(146, 113, 78) if paper_style else (147, 82, 29))
+        self._fill_cells(frame, target_shape_cells, (220, 233, 207) if paper_style else (231, 221, 255))
+        if not paper_style:
+            self._fill_cells(frame, path, (226, 239, 255))
+        self._fill_cells(frame, target_cells, (220, 233, 207) if paper_style else (248, 208, 89))
+        self._fill_cells(frame, active_cells, (227, 239, 232) if paper_style else (151, 216, 189))
+        self._fill_cells(frame, obstacles, (168, 173, 178) if paper_style else (89, 100, 110))
 
         if start_cell is not None:
             self._fill_cells(frame, [start_cell], (156, 219, 207))
         if goal_cell is not None:
             self._fill_cells(frame, [goal_cell], (242, 185, 185))
 
-        line_color = (190, 201, 211)
+        line_color = (216, 222, 227) if paper_style else (190, 201, 211)
         left_i = int(round(left))
         top_i = int(round(top))
         right_i = int(round(left + grid_w_px))
@@ -155,6 +167,17 @@ class SimulatedCamera:
                 else:
                     self._draw_circle(frame, false_center, radius, false_color)
 
+        if paper_style:
+            for cell in set(target_shape_cells) | set(target_cells):
+                bbox = self._cell_bbox_px(cell)
+                if bbox is None:
+                    continue
+                x0, y0, x1, y1 = bbox
+                edge = (118, 150, 87)
+                frame[y0:y0 + 1, x0:x1] = edge
+                frame[y1 - 1:y1, x0:x1] = edge
+                frame[y0:y1, x0:x0 + 1] = edge
+                frame[y0:y1, x1 - 1:x1] = edge
         return frame
 
     @property
@@ -162,19 +185,19 @@ class SimulatedCamera:
         width, height = self.frame_size
         usable_w = width - 2 * self.margin_px
         usable_h = height - 2 * self.margin_px
-        span_cols = self.cols + 2 * CAMERA_LAYOUT_PADDING_CELLS
-        span_rows = self.rows + 2 * CAMERA_LAYOUT_PADDING_CELLS
+        span_cols = self.cols + 2 * self.layout_padding_cells
+        span_rows = self.rows + 2 * self.layout_padding_cells
         return min(usable_w / span_cols, usable_h / span_rows)
 
     @property
     def grid_origin_px(self) -> tuple[float, float]:
         width, height = self.frame_size
         cell_size = self.cell_size_px
-        full_w = cell_size * (self.cols + 2 * CAMERA_LAYOUT_PADDING_CELLS)
-        full_h = cell_size * (self.rows + 2 * CAMERA_LAYOUT_PADDING_CELLS)
+        full_w = cell_size * (self.cols + 2 * self.layout_padding_cells)
+        full_h = cell_size * (self.rows + 2 * self.layout_padding_cells)
         outer_left = (width - full_w) / 2
         outer_top = (height - full_h) / 2
-        return outer_left + CAMERA_LAYOUT_PADDING_CELLS * cell_size, outer_top + CAMERA_LAYOUT_PADDING_CELLS * cell_size
+        return outer_left + self.layout_padding_cells * cell_size, outer_top + self.layout_padding_cells * cell_size
 
     def grid_position_to_pixel(self, position: GridPosition) -> tuple[int, int]:
         row, col = position
@@ -310,20 +333,20 @@ class SimulatedCamera:
             return None
         if cell in CORNER_RESERVOIRS:
             return None
-        scale = 1.9 if cell in SIDE_RESERVOIR_LARGE or cell in CORNER_RESERVOIRS else 0.8
+        scale = 1.15 if cell in SIDE_RESERVOIR_LARGE else 0.85
         cx = left + (col + 0.5) * cell_size
         cy = top + (row + 0.5) * cell_size
-        if cell in SIDE_RESERVOIR_LARGE:
-            side = self._reservoir_side(cell)
-            if side == "top":
-                cy = top - 2.0 * cell_size
-            elif side == "bottom":
-                cy = top + (self.rows + 2.0) * cell_size
-            elif side == "left":
-                cx = left - 2.0 * cell_size
-            elif side == "right":
-                cx = left + (self.cols + 2.0) * cell_size
         half = cell_size * scale / 2
+        offset = half + (0.85 * cell_size if cell in SIDE_RESERVOIR_LARGE else 0)
+        side = self._reservoir_side(cell)
+        if side == "top":
+            cy = top - offset
+        elif side == "bottom":
+            cy = top + self.rows * cell_size + offset
+        elif side == "left":
+            cx = left - offset
+        elif side == "right":
+            cx = left + self.cols * cell_size + offset
         return (
             int(round(cx - half)),
             int(round(cy - half)),

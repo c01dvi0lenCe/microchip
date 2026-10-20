@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from controllers.arrival_confirmation import ArrivalConfirmationGate
 from controllers.electrode_transaction import TransactionResult
 from dmf.layout import cell_from_electrode_id
-from dmf_simulation import MultiDropletAssignment, SimulatedDroplet, StepEvent, electrode_id
+from dmf_simulation import MultiDropletAssignment, OperationMetrics, SimulatedDroplet, StepEvent, electrode_id
 from main import STM32MatrixController
 
 
@@ -53,7 +53,7 @@ class MainControllerLayoutTests(unittest.TestCase):
             sizes.append((x1 - x0, y1 - y0))
         return sizes
 
-    def test_multi_path_canvas_draws_shared_path_cells_once(self):
+    def test_multi_path_canvas_keeps_grid_visible_under_routes(self):
         self.app.operation_var.set(self.app.OP_MULTI)
         self.app.matrix_canvas = self.app.path_canvas
         self.app.operation_paths = [
@@ -76,8 +76,8 @@ class MainControllerLayoutTests(unittest.TestCase):
         finally:
             self.app._draw_cell = original_draw_cell
 
-        self.assertEqual(len(path_drawn_cells), len(set(path_drawn_cells)))
-        self.assertEqual(set(path_drawn_cells), self.app.operation_path_cells)
+        self.assertEqual(path_drawn_cells, [])
+        self.assertEqual(self.app.operation_path_cells, {(2, 2), (2, 3), (2, 4), (3, 3)})
 
     def _click_cell(self, cell, shift=False):
         original = self.app._canvas_to_cell
@@ -390,6 +390,63 @@ class MainControllerLayoutTests(unittest.TestCase):
 
         self.assertEqual(applied, [result])
         self.assertEqual(str(self.app.btn_plan.cget("state")), "normal")
+
+    def test_runtime_fault_injection_globally_reschedules_remaining_droplets(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.auto_running = True
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (1, 1), (5, 5), [(1, 1), (5, 5)], [(1, 1), (5, 5)]),
+            MultiDropletAssignment(2, (5, 1), (5, 8), [(5, 1), (5, 8)], [(5, 1), (5, 8)]),
+        ]
+        self.app.multi_targets = [(5, 5), (5, 8)]
+        self.app.sim_droplets = [SimulatedDroplet((5, 5)), SimulatedDroplet((5, 2))]
+        self.app.multi_droplet_visible = [True, True]
+        self.app.multi_completed_droplet_ids = {1}
+        self.app.operation_metrics = OperationMetrics("多液滴")
+
+        self.assertTrue(self.app.replan_after_fault((5, 4)))
+        self.assertTrue(self.app.auto_running)
+        self.assertEqual(self.app.multi_step_index, 0)
+        self.assertEqual(self.app.multi_assignments[1].source, (5, 2))
+        self.assertNotIn((5, 4), self.app.multi_assignments[1].path)
+        self.assertEqual(self.app.multi_completed_droplet_ids, {1})
+        self.assertEqual(self.app.operation_metrics.fault_global_replan_count, 1)
+        self.assertEqual(self.app.operation_metrics.planning_status, "success")
+
+    def test_known_fault_tool_marks_fault_separately_from_static_obstacles(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app._update_tool_options()
+        self.app.tool_var.set(self.app.TOOL_FAULT)
+        self._click_cell((3, 4))
+
+        self.assertEqual(self.app.faulty_electrodes, {(3, 4)})
+        self.assertEqual(self.app.obstacle_cells, set())
+        self.assertIn(self.app.TOOL_FAULT, self.app.tool_combobox["values"])
+
+    def test_unreachable_runtime_fault_enters_protective_pause_and_is_logged(self):
+        self.app.operation_var.set(self.app.OP_MULTI)
+        self.app.auto_running = True
+        self.app.obstacle_cells = {(1, 0)}
+        self.app.multi_assignments = [
+            MultiDropletAssignment(1, (0, 2), (0, 0), [(0, 2), (0, 1), (0, 0)], [(0, 2), (0, 1), (0, 0)]),
+        ]
+        self.app.sim_droplets = [SimulatedDroplet((0, 2))]
+        self.app.multi_droplet_visible = [True]
+        self.app.operation_metrics = OperationMetrics("多液滴")
+
+        self.assertFalse(self.app.replan_after_fault((0, 1)))
+        self.assertFalse(self.app.auto_running)
+        self.assertEqual(self.app.operation_metrics.planning_status, "unreachable")
+        self.assertEqual(self.app.operation_metrics.fault_global_replan_count, 1)
+        self.assertIn("unreachable", self.app.log_text.get("1.0", "end"))
+
+    def test_known_faults_round_trip_through_task_settings_snapshot(self):
+        self.app.faulty_electrodes = {(7, 8), (2, 3)}
+
+        serialized = self.app._serialize_settings_snapshot(self.app._settings_snapshot())
+        restored = self.app._deserialize_settings_snapshot(serialized)
+
+        self.assertEqual(restored["faulty_electrodes"], self.app.faulty_electrodes)
 
     def test_initial_core_droplet_can_only_fill_one_multi_target(self):
         self.app.operation_var.set(self.app.OP_MULTI)
@@ -1280,11 +1337,12 @@ class MainControllerLayoutTests(unittest.TestCase):
         self.app.is_connected = True
         self.app.send_command = lambda command, log_send=True: commands.append(command) or True
 
-        self.app.start_camera()
+        with patch("controllers.camera_controller.LiveSource", side_effect=RuntimeError("MVS unavailable")):
+            self.app.start_camera()
 
         self.assertFalse(self.app.camera_running)
         self.assertEqual(commands, [])
-        self.assertIn("相机适配器未配置", self.app.camera_label.cget("text"))
+        self.assertIn("相机启动失败", self.app.camera_label.cget("text"))
 
     def test_detection_dropout_counts_and_holds_before_timeout(self):
         self.app.operation_metrics = self.app._new_operation_metrics("move")

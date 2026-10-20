@@ -39,6 +39,7 @@ class ElectrodeRegion:
     electrode_id: int
     row: int
     col: int
+    geometry_type: str
     center_px: Point
     polygon_px: tuple[Point, ...]
     center_mm: Point
@@ -76,6 +77,7 @@ class ElectrodeMap:
                 electrode_id=electrode_id,
                 row=cell[0],
                 col=cell[1],
+                geometry_type=_geometry_type(cell),
                 center_px=polygon_centroid(polygon_px),
                 polygon_px=polygon_px,
                 center_mm=polygon_centroid(polygon_mm),
@@ -161,3 +163,14 @@ def _grid_polygon(cell: Cell) -> tuple[Point, ...]:
             return _rect(-2.0, row + 0.5, scale, scale)
         return _rect(GRID_COLS + 2.0, row + 0.5, scale, scale)
     return _rect(col + 0.5, row + 0.5, 0.8, 0.8)
+
+
+def _geometry_type(cell: Cell) -> str:
+    row, col = cell
+    if 0 <= row < GRID_ROWS and 0 <= col < GRID_COLS:
+        return "core_rectangle"
+    if cell in CORNER_RESERVOIRS:
+        return "peripheral_corner_l"
+    if cell in SIDE_RESERVOIR_LARGE:
+        return "peripheral_large_rectangle"
+    return "peripheral_small_rectangle"

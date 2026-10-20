@@ -54,14 +54,33 @@ def _schedule_one_multi_path(
     min_start_delay: int = 0,
     merge_regions: Optional[Mapping[Cell, int]] = None,
     allow_settled_goal_adjacency: bool = False,
+    hold_start_during_delay: bool = False,
 ) -> list[Optional[Cell]]:
     own_goal = path[-1]
     region_map = dict(merge_regions or {})
     for start_delay in range(min_start_delay, min_start_delay + max_wait_steps + 1):
-        scheduled: list[Optional[Cell]] = [None] * start_delay
-        path_index = 0
+        if hold_start_during_delay and start_delay:
+            scheduled: list[Optional[Cell]] = [path[0]] * (start_delay + 1)
+            path_index = 1
+            failed = any(
+                _multi_step_conflicts(
+                    existing_paths,
+                    path[0],
+                    path[0],
+                    step,
+                    own_goal,
+                    region_map,
+                    allow_settled_goal_adjacency=allow_settled_goal_adjacency,
+                )
+                for step in range(len(scheduled))
+            )
+        else:
+            scheduled = [None] * start_delay
+            path_index = 0
+            failed = False
         wait_steps = 0
-        failed = False
+        if failed:
+            continue
         while path_index < len(path):
             step = len(scheduled)
             previous_cell = scheduled[-1] if scheduled else None
@@ -184,10 +203,13 @@ def schedule_assignments_with_reroute(
     merge_regions: Mapping[Cell, int],
     max_parallel: int = MAX_PARALLEL_MULTI_DROPLETS,
     max_wait_steps: int = 80,
+    existing_paths: Iterable[list[Optional[Cell]]] = (),
+    hold_start_during_delay: bool = False,
 ) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
     assignment_list = list(assignments)
     if not assignment_list:
         return [], [], []
+    existing_paths = [list(path) for path in existing_paths]
 
     result = _schedule_assignments_with_reroute_core(
         assignment_list,
@@ -196,6 +218,8 @@ def schedule_assignments_with_reroute(
         merge_regions,
         max_parallel,
         max_wait_steps,
+        existing_paths,
+        hold_start_during_delay,
     )
     if result[0]:
         return result
@@ -207,6 +231,8 @@ def schedule_assignments_with_reroute(
         merge_regions,
         max_parallel,
         max_wait_steps,
+        existing_paths,
+        hold_start_during_delay,
     )
 
 
@@ -217,6 +243,8 @@ def _schedule_assignments_in_fill_batches(
     merge_regions: Mapping[Cell, int],
     max_parallel: int,
     max_wait_steps: int,
+    existing_paths: Iterable[list[Optional[Cell]]] = (),
+    hold_start_during_delay: bool = False,
 ) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
     assignment_list = list(assignments)
     if not assignment_list:
@@ -226,14 +254,17 @@ def _schedule_assignments_in_fill_batches(
     max_wait_steps = max(max_wait_steps, 220)
     base_obstacles = set(obstacles)
     pending_targets = [target for _source, target, _path in assignment_list]
+    # Held starts represent already-existing droplets, not a dispensing pool.
+    fixed_sources = {target: source for source, target, _path in assignment_list}
     source_capacity: dict[Cell, int] = {}
     for source, _target, _path in assignment_list:
-        if is_reservoir_cell(source):
+        if is_reservoir_cell(source) and not hold_start_during_delay:
             source_capacity[source] = RESERVOIR_DROPLET_CAPACITY
         else:
             source_capacity[source] = source_capacity.get(source, 0) + INITIAL_DROPLET_CAPACITY
     sources = sorted(source_capacity, key=lambda cell: electrode_id(cell[0], cell[1]))
-    combined: list[list[Optional[Cell]]] = []
+    reserved_paths = [list(path) for path in existing_paths]
+    combined: list[list[Optional[Cell]]] = list(reserved_paths)
     scheduled_assignments: list[tuple[Cell, Cell, list[Cell]]] = []
     scheduled_paths: list[list[Optional[Cell]]] = []
     round_indices: list[int] = []
@@ -241,7 +272,7 @@ def _schedule_assignments_in_fill_batches(
     round_index = 1
 
     while pending_targets:
-        round_start = max((len(schedule) for schedule in combined), default=0)
+        round_start = max((len(schedule) for schedule in scheduled_paths), default=0)
         scheduled_this_round = 0
 
         while pending_targets and scheduled_this_round < max_parallel:
@@ -252,7 +283,8 @@ def _schedule_assignments_in_fill_batches(
                     settled_targets,
                     merge_regions,
                 )
-                for source in sources:
+                candidate_sources = [fixed_sources[target]] if hold_start_during_delay else sources
+                for source in candidate_sources:
                     if source_capacity.get(source, 0) <= 0:
                         continue
                     path = planner.plan(source, target, safe_obstacles - {source, target})
@@ -265,6 +297,7 @@ def _schedule_assignments_in_fill_batches(
                         min_start_delay=round_start,
                         merge_regions=merge_regions,
                         allow_settled_goal_adjacency=True,
+                        hold_start_during_delay=hold_start_during_delay,
                     )
                     if not scheduled:
                         continue
@@ -325,6 +358,8 @@ def _schedule_assignments_with_reroute_core(
     merge_regions: Mapping[Cell, int],
     max_parallel: int,
     max_wait_steps: int,
+    existing_paths: Iterable[list[Optional[Cell]]] = (),
+    hold_start_during_delay: bool = False,
 ) -> tuple[list[tuple[Cell, Cell, list[Cell]]], list[list[Optional[Cell]]], list[int]]:
     assignment_list = list(assignments)
     if not assignment_list:
@@ -344,6 +379,8 @@ def _schedule_assignments_with_reroute_core(
             merge_regions,
             max_parallel,
             max_wait_steps,
+            existing_paths,
+            hold_start_during_delay,
         )
         if failed_index is None:
             return scheduled_assignments, scheduled_paths, round_indices
@@ -362,6 +399,8 @@ def _try_schedule_assignment_order(
     merge_regions: Mapping[Cell, int],
     max_parallel: int,
     max_wait_steps: int,
+    existing_paths: Iterable[list[Optional[Cell]]] = (),
+    hold_start_during_delay: bool = False,
 ) -> tuple[
     list[tuple[Cell, Cell, list[Cell]]],
     list[list[Optional[Cell]]],
@@ -369,7 +408,7 @@ def _try_schedule_assignment_order(
     Optional[int],
     Optional[int],
 ]:
-    combined: list[list[Optional[Cell]]] = []
+    combined: list[list[Optional[Cell]]] = [list(path) for path in existing_paths]
     scheduled_assignments: list[tuple[Cell, Cell, list[Cell]]] = []
     scheduled_paths: list[list[Optional[Cell]]] = []
     round_indices: list[int] = []
@@ -395,6 +434,7 @@ def _try_schedule_assignment_order(
             min_start_delay=state["start"],
             merge_regions=merge_regions,
             allow_settled_goal_adjacency=True,
+            hold_start_during_delay=hold_start_during_delay,
         )
         if not scheduled:
             reroute_obstacles = base_obstacles | _settled_target_risk_obstacles(
@@ -412,6 +452,7 @@ def _try_schedule_assignment_order(
                     min_start_delay=state["start"],
                     merge_regions=merge_regions,
                     allow_settled_goal_adjacency=True,
+                    hold_start_during_delay=hold_start_during_delay,
                 )
         if not scheduled:
             blocker_index = _first_target_blocker_index(path, target, scheduled_assignments, merge_regions)

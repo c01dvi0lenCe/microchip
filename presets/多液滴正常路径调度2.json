@@ -1,0 +1,199 @@
+{
+  "schema": "dmf_visual_platform_settings",
+  "version": 1,
+  "saved_at": "2026-10-06 17:15:38",
+  "operation": "多液滴",
+  "tool": "设置目标电极",
+  "mode": "仿真",
+  "settings": {
+    "start_cell": [
+      2,
+      1
+    ],
+    "goal_cell": [
+      5,
+      7
+    ],
+    "secondary_cell": [
+      1,
+      4
+    ],
+    "split_left_cell": [
+      1,
+      0
+    ],
+    "split_right_cell": [
+      1,
+      2
+    ],
+    "loaded_reservoirs": [],
+    "initial_droplet_cells": [
+      [
+        1,
+        4
+      ],
+      [
+        4,
+        16
+      ],
+      [
+        10,
+        2
+      ],
+      [
+        11,
+        11
+      ],
+      [
+        17,
+        4
+      ],
+      [
+        17,
+        16
+      ]
+    ],
+    "obstacle_cells": [
+      [
+        1,
+        9
+      ],
+      [
+        4,
+        10
+      ],
+      [
+        5,
+        6
+      ],
+      [
+        6,
+        1
+      ],
+      [
+        7,
+        14
+      ],
+      [
+        9,
+        5
+      ],
+      [
+        9,
+        16
+      ],
+      [
+        13,
+        18
+      ],
+      [
+        14,
+        2
+      ],
+      [
+        14,
+        14
+      ],
+      [
+        15,
+        7
+      ],
+      [
+        17,
+        0
+      ],
+      [
+        18,
+        5
+      ],
+      [
+        19,
+        12
+      ],
+      [
+        19,
+        17
+      ]
+    ],
+    "faulty_electrodes": [
+      [
+        0,
+        14
+      ],
+      [
+        4,
+        3
+      ],
+      [
+        11,
+        10
+      ],
+      [
+        15,
+        10
+      ]
+    ],
+    "target_shape_points": [
+      [
+        7,
+        7
+      ],
+      [
+        12,
+        14
+      ],
+      [
+        12,
+        5
+      ],
+      [
+        9,
+        18
+      ],
+      [
+        0,
+        12
+      ],
+      [
+        13,
+        9
+      ]
+    ],
+    "target_shape_cells": [
+      [
+        7,
+        7
+      ],
+      [
+        12,
+        14
+      ],
+      [
+        12,
+        5
+      ],
+      [
+        9,
+        18
+      ],
+      [
+        0,
+        12
+      ],
+      [
+        13,
+        9
+      ]
+    ],
+    "loop_path_points": [],
+    "loop_path_cells": [],
+    "loop_routes": [],
+    "loop_route_index": null,
+    "loop_cycles": 3,
+    "loop_interval_s": 0.0,
+    "mixing_cycles": 2
+  },
+  "motion_profile": "理想",
+  "vision_noise": "关闭",
+  "fault_mode": "无"
+}

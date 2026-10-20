@@ -6,7 +6,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import numpy as np
 
-from test_chapter2_runner import make_inputs, read_rows
+try:
+    from .test_chapter2_runner import make_inputs, read_rows
+except ImportError:
+    from test_chapter2_runner import make_inputs, read_rows
 from dmf.experiment.runner import run_experiment
 
 

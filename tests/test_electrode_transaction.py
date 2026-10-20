@@ -189,6 +189,41 @@ class ElectrodeTransactionClientTests(unittest.TestCase):
         self.assertEqual(second.sequence, 1)
         self.assertEqual(sent.count("BEGIN:1"), 2)
 
+    def test_observer_preserves_commands_and_records_actual_ack_clock(self):
+        client, sent = self.make_loopback(drop_first_commit=True)
+        events = []
+        client.event_observer = events.append
+        self.assertTrue(client.apply_changes({7: 1}).applied)
+        confirmed = [e for e in events if e['event'] == 'applied']
+        self.assertEqual(len(confirmed), 1)
+        ack = next(e for e in events if e.get('line') == 'ACK:1:APPLIED')
+        self.assertEqual(confirmed[0]['host_monotonic_ns'], ack['host_monotonic_ns'])
+        self.assertEqual(confirmed[0]['host_perf_counter_ns'], ack['host_perf_counter_ns'])
+        self.assertEqual(confirmed[0]['changes'], {7: 1})
+        self.assertEqual(confirmed[0]['attempt'], 2)
+        self.assertEqual(sent.count('COMMIT:1'), 1)
+        self.assertTrue(client.all_off())
+        self.assertEqual(events[-1]['event'], 'all_off_confirmed')
+
+    def test_observer_failure_never_blocks_emergency_or_changes_retry_policy(self):
+        def broken(event):
+            raise OSError('disk failed')
+        client, sent = self.make_loopback()
+        client.event_observer = broken
+        self.assertTrue(client.apply_changes({1: 1}).applied)
+        self.assertTrue(client.all_off())
+        self.assertEqual(client.observer_error, 'disk failed')
+        self.assertEqual(sent, ['BEGIN:1', 'SET:1:1', 'COMMIT:1', 'ALL_OFF'])
+
+    def test_failures_emit_unknown_state_not_fake_application(self):
+        events = []
+        client = ElectrodeTransactionClient(lambda line: True, ack_timeout_s=.001,
+            max_retries=2, initial_sequence=1, event_observer=events.append)
+        self.assertFalse(client.apply_changes({420: 1}).applied)
+        self.assertEqual(events[-1]['event'], 'transaction_failed')
+        self.assertEqual(events[-1]['changes'], {420: 1})
+        self.assertFalse(any(e['event'] == 'applied' for e in events))
+
 
 if __name__ == "__main__":
     unittest.main()

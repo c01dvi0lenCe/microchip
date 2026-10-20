@@ -13,6 +13,7 @@ from .common import (
     time,
     tk,
 )
+from dmf.recording import clock_stamp
 
 
 class HardwareRuntimeMixin:
@@ -29,7 +30,7 @@ class HardwareRuntimeMixin:
             self.btn_refresh.config(state="normal")
             self.btn_connect.config(state="normal")
             self._set_connection_state(self.is_connected, self.port_combobox.get())
-            self.auto_status_label.config(text="闭环: 实物待机（相机适配器未配置）", fg=self.colors["muted"])
+            self.auto_status_label.config(text="闭环: 实物待机（MVS 相机可直接预览）", fg=self.colors["muted"])
         self._update_simulation_control_visibility()
         self._update_tool_options()
         if not self.camera_running:
@@ -54,6 +55,9 @@ class HardwareRuntimeMixin:
 
     def _set_connection_state(self, connected, port_name=""):
         self.is_connected = connected
+        if not connected and hasattr(self, 'electrode_event_stream'):
+            self.electrode_event_stream.emit(dict(event='state_unknown', **clock_stamp(),
+                error='serial disconnected'))
         if self.is_simulation_mode() and not connected:
             self.btn_connect.config(text="打开串口", bg=self.colors["accent"], activebackground=self.colors["accent_hover"])
             self.connection_badge.config(text="● 仿真模式", fg=self.colors["accent"])
@@ -314,6 +318,9 @@ class HardwareRuntimeMixin:
                                 if line.startswith("ERR:"):
                                     self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
                             elif line.startswith("SYNC:"):
+                                if hasattr(self, 'electrode_event_stream'):
+                                    self.electrode_event_stream.emit(dict(event='state_unknown',
+                                        **clock_stamp(), line=line, error='external state sync requires resynchronization'))
                                 parts = line.split(":")
                                 if len(parts) == 3:
                                     try:
@@ -325,6 +332,9 @@ class HardwareRuntimeMixin:
                             else:
                                 self.root.after(0, self.log, f"收到 <- {line}")
                 except Exception as exc:
+                    if hasattr(self, 'electrode_event_stream'):
+                        self.electrode_event_stream.emit(dict(event='state_unknown',
+                            **clock_stamp(), error=f'serial receive failed: {exc}'))
                     self.root.after(0, self.log, f"接收错误: {exc}")
                     time.sleep(1)
             time.sleep(0.01)
@@ -353,9 +363,25 @@ class HardwareRuntimeMixin:
             self._experiment_closing = True
             self.stop_experiment()
             return
+        source = getattr(self, '_hardware_camera_source', None)
+        if source is not None and source.worker.is_alive():
+            self.auto_running = False
+            self.camera_running = False
+            if hasattr(self, '_hardware_camera_stop'):
+                self._hardware_camera_stop.set()
+            source.close()
+            if not getattr(self, '_camera_close_waiting', False):
+                self._camera_close_waiting = True
+                self.log('正在结束相机录像并保存时间/电极日志，请稍候')
+            self.root.after(50, self.on_close)
+            return
         self.stop_event.set()
         self.auto_running = False
         self.camera_running = False
+        if hasattr(self, "_hardware_camera_stop"):
+            self._hardware_camera_stop.set()
+        if getattr(self, "_hardware_camera_source", None) is not None:
+            self._hardware_camera_source.close()
         for after_id in (self.auto_after_id, self.camera_after_id, self.manual_after_id,
                          self.planning_poll_after_id, self.experiment_after_id, self.sash_after_id):
             if after_id is not None:

@@ -1,6 +1,8 @@
 import tempfile
+import threading
 import time
 import unittest
+from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import Mock, patch
 import numpy as np
@@ -49,6 +51,75 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):next(iter(source))
         source.close();self.assertLess(time.monotonic()-started,.15)
 
+    def test_slow_camera_initialization_uses_separate_startup_timeout(self):
+        class Camera:
+            def read(self,timeout_s):return np.zeros((8,8,3),np.uint8)
+            def close(self):pass
+        def factory():
+            time.sleep(.08)
+            return Camera()
+        source=LiveSource({'frame_timeout_s':.03,'startup_timeout_s':.3},factory=factory)
+        try:
+            packet=next(iter(source))
+            self.assertEqual(packet.image_bgr.shape,(8,8,3))
+        finally:
+            source.close()
+
+    def test_camera_commands_run_off_caller_thread(self):
+        class Camera:
+            def __init__(self):
+                self.read_started = threading.Event()
+                self.command_thread = None
+            def read(self,timeout_s):
+                self.read_started.set()
+                time.sleep(.01)
+                return np.zeros((8,8,3),np.uint8)
+            def mark(self,value):
+                self.command_thread=threading.current_thread().name
+                return value
+            def close(self):pass
+        camera=Camera()
+        source=LiveSource({'frame_timeout_s':.03,'startup_timeout_s':.3},factory=lambda:camera)
+        try:
+            self.assertTrue(camera.read_started.wait(.2))
+            result=source.submit_camera_command('mark','ok')
+            self.assertEqual(result.result(timeout=.3),'ok')
+            self.assertNotEqual(camera.command_thread,threading.current_thread().name)
+        finally:
+            source.close()
+
+    def test_live_source_recovers_from_transient_camera_frame_timeout(self):
+        class Camera:
+            def __init__(self):self.calls=0
+            def read(self,timeout_s):
+                self.calls+=1
+                if self.calls==1:raise TimeoutError('temporary SDK timeout')
+                return np.zeros((8,8,3),np.uint8)
+            def close(self):pass
+        camera=Camera()
+        source=LiveSource({'frame_timeout_s':.02,'startup_timeout_s':.2},factory=lambda:camera)
+        try:
+            packet=next(iter(source))
+            self.assertEqual(packet.image_bgr.shape,(8,8,3))
+            self.assertGreaterEqual(camera.calls,2)
+        finally:
+            source.close()
+
+    def test_live_source_reports_sustained_frame_stall(self):
+        class Camera:
+            def read(self,timeout_s):
+                time.sleep(.01)
+                raise TimeoutError('no frame')
+            def close(self):pass
+        source=LiveSource({'frame_timeout_s':.01,'startup_timeout_s':.2,
+                           'capture_stall_timeout_s':.05},factory=Camera)
+        try:
+            with self.assertRaisesRegex(TimeoutError,'produced no frame'):
+                next(iter(source))
+        finally:
+            source.close()
+
+    @unittest.skipUnless(find_spec('torch'), 'PyTorch is optional; install torch to test TorchScript backend')
     def test_torchscript_binary_mask_has_original_shape(self):
         import torch
         class Binary(torch.nn.Module):

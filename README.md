@@ -69,7 +69,9 @@ python -m validation.closed_loop_chain.run_validation
 python -m dmf.vision extract-frames --video input.mp4 --video-id pilot01 --output-dir data/frames/pilot01
 python -m dmf.vision validate-dataset --manifest data/splits/manifest.csv --annotations data/annotations/pilot.csv
 python -m dmf.vision run-baseline --config configs/experiment.yaml
-python -m dmf.vision evaluate --results results/pilot/frame_results.csv --ground-truth data/annotations/pilot.csv --output-dir results/pilot/evaluation
+python -m dmf.vision evaluate --results results/pilot/frame_results.csv --ground-truth data/annotations/pilot.csv --electrode-map configs/electrode_map.yaml --output-dir results/pilot/evaluation
+python -m dmf.vision render-map --image chip.png --electrode-map configs/electrode_map.yaml --output results/electrode_map_overlay.png --zoom-electrodes 1,20,190,191,381,400
+python -m dmf.vision export-timeseries --results results/pilot/frame_results.csv --output results/pilot/transport_timeseries.csv
 ```
 
 配置和数据格式见 `docs/vision-experiment-framework.md`。原始视频、帧、Mask和运行结果默认不提交Git。

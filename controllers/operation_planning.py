@@ -15,7 +15,7 @@ from .common import (
     schedule_multi_paths,
     tk,
 )
-from .planning_job import MultiPlanRequest
+from .planning_job import MultiPlanRequest, MultiPlanResult
 
 
 class OperationPlanningMixin:
@@ -312,7 +312,10 @@ class OperationPlanningMixin:
         request = self._capture_multi_plan_request()
         if request is None:
             return []
-        return self._apply_multi_plan(self._compute_multi_plan_request(request))
+        result = self._compute_multi_plan_request(request)
+        if isinstance(result, MultiPlanResult):
+            return self._apply_multi_plan(result.assignments, result.metrics)
+        return self._apply_multi_plan(result)
 
     def request_plan_path(self, reset_droplet=False, on_complete=None):
         if self.operation_var.get() != self.OP_MULTI:
@@ -362,6 +365,11 @@ class OperationPlanningMixin:
                 )
             return None
         source_capacity = self._multi_source_capacities()
+        invalid_faults = self.faulty_electrodes & (set(multi_sources) | set(self.target_shape_cells))
+        if invalid_faults:
+            if report_errors:
+                self._handle_plan_failed("多液滴规划失败：故障电极不能位于源液滴或目标电极")
+            return None
         total_capacity = sum(source_capacity.values())
         if total_capacity < len(self.target_shape_cells):
             if report_errors:
@@ -375,23 +383,31 @@ class OperationPlanningMixin:
             targets=tuple(self.target_shape_cells),
             obstacles=frozenset(self._routing_obstacles(*multi_sources, *self.target_shape_cells)),
             source_capacity=tuple(sorted(source_capacity.items())),
+            faulty_electrodes=frozenset(self.faulty_electrodes),
         )
 
     def _compute_multi_plan_request(self, request):
-        return build_multi_droplet_assignments(
+        metrics = {}
+        assignments = build_multi_droplet_assignments(
             request.sources,
             request.targets,
             self.planner,
             request.obstacles,
             source_capacity=dict(request.source_capacity),
+            faulty_electrodes=request.faulty_electrodes,
+            planning_metrics=metrics,
         )
+        return MultiPlanResult(assignments, metrics)
 
-    def _complete_multi_plan_request(self, request, assignments, on_complete):
+    def _complete_multi_plan_request(self, request, result, on_complete):
         try:
             if request != self._capture_multi_plan_request(report_errors=False):
                 self.log("规划期间任务设置已改变，旧的多液滴规划结果已丢弃")
                 return
-            planned = self._apply_multi_plan(assignments)
+            if isinstance(result, MultiPlanResult):
+                planned = self._apply_multi_plan(result.assignments, result.metrics)
+            else:
+                planned = self._apply_multi_plan(result)
             if on_complete is not None and self._operation_ready_to_start(planned):
                 on_complete(planned)
         finally:
@@ -405,13 +421,26 @@ class OperationPlanningMixin:
     def _restore_multi_plan_controls(self):
         self.btn_plan.config(state="normal")
 
-    def _apply_multi_plan(self, assignments):
+    def _apply_multi_plan(self, assignments, planning_metrics=None):
         if not assignments:
+            metrics = self._new_operation_metrics(self.OP_MULTI)
+            metrics.planning_status = "unreachable"
+            metrics.faulty_electrodes = sorted(self.faulty_electrodes)
+            planning_metrics = planning_metrics or {}
+            metrics.assignment_time_ms = planning_metrics.get("assignment_time_ms", 0.0)
+            metrics.routing_time_ms = planning_metrics.get("routing_time_ms", 0.0)
+            metrics.scheduling_time_ms = planning_metrics.get("scheduling_time_ms", 0.0)
+            metrics.total_planning_time_ms = planning_metrics.get("total_planning_time_ms", 0.0)
+            self.operation_metrics = metrics
+            self.operation_metrics_history.append(metrics)
+            self._refresh_metrics_label()
             return self._handle_plan_failed("多液滴规划失败：目标电极存在无法避碰的路径")
 
         self.path = []
         self.merge_path_b = []
         self.multi_assignments = assignments
+        self._capture_multi_source_colors()
+        self.multi_plan_metrics = dict(planning_metrics or {})
         self.multi_targets = [assignment.target for assignment in assignments]
         self.operation_paths = [assignment.path for assignment in assignments]
         self._refresh_operation_path_cells()
@@ -424,6 +453,8 @@ class OperationPlanningMixin:
         max_steps = max(len(assignment.scheduled_path) for assignment in assignments)
         self.auto_status_label.config(text=f"闭环: 多液滴 {len(assignments)} 滴 / {max_steps - 1} 步", fg=self.colors["accent"])
         self.log(f"多液滴规划完成：{len(self.multi_targets)} 个目标电极将全部填满")
+        if self.faulty_electrodes:
+            self.log("规划已屏蔽已知故障电极：" + " / ".join(self._cell_label(cell) for cell in sorted(self.faulty_electrodes)))
         round_count = max(getattr(assignment, "round_index", 1) for assignment in assignments)
         if round_count > 1:
             self.log(
@@ -763,13 +794,14 @@ class OperationPlanningMixin:
     def clear_obstacles(self):
         if self.auto_running:
             self.stop_auto_control("清空障碍物")
-        if not self.obstacle_cells:
-            self.log("障碍物已为空")
+        if not self.obstacle_cells and not self.faulty_electrodes:
+            self.log("障碍物和已知故障电极均为空")
             return
         self._push_undo_snapshot()
         self._clear_planned_operation()
         self.obstacle_cells.clear()
+        self.faulty_electrodes.clear()
         self._reset_droplets_for_operation()
-        self.log("障碍物已清空")
+        self.log("静态障碍物和已知故障电极已清空")
         self._draw_matrix_canvas()
         self._render_sim_camera_frame()

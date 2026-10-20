@@ -17,6 +17,13 @@ class MultiPlanRequest:
     targets: tuple[Cell, ...]
     obstacles: frozenset[Cell]
     source_capacity: tuple[tuple[Cell, int], ...]
+    faulty_electrodes: frozenset[Cell] = frozenset()
+
+
+@dataclass(frozen=True)
+class MultiPlanResult:
+    assignments: Any
+    metrics: dict[str, float]
 
 
 class PlanningJobRunner:

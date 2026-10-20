@@ -1,2 +1,2 @@
-video_id,batch_id,frame_id,timestamp_s,mask_path,source_electrode,target_electrode,state_gt
-synthetic_v1,synthetic_batch,0,0.0,mask_000.png,1,2,Partial
+video_id,experiment_id,batch_id,frame_id,timestamp_s,frame_path,mask_path,source_electrode,target_electrode,state_gt,lighting_condition,notes
+synthetic_v1,synthetic_transport_01,synthetic_batch,0,0.0,frame_000.png,mask_000.png,1,2,Partial,uniform,synthetic fixture

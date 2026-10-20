@@ -9,8 +9,10 @@ import yaml
 
 from dmf.vision.cli import extract_frames, main
 from dmf.vision.evaluation import evaluate_results
-from dmf.vision.config import load_electrode_map
+from dmf.vision.config import load_electrode_map, save_electrode_map
+from dmf.vision.overlay import render_electrode_overlay
 from dmf.vision.pipeline import run_baseline
+from dmf.vision.timeseries import export_transport_timeseries
 
 try:
     import cv2
@@ -162,6 +164,80 @@ class VisionCliTests(unittest.TestCase):
             config_path.write_text(yaml.safe_dump(base), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid electrode IDs"):
                 load_electrode_map(config_path)
+
+    def test_map_json_round_trip_and_overlay_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            map_yaml = root / "map.yaml"
+            map_yaml.write_text(
+                yaml.safe_dump(
+                    {
+                        "rows": 20,
+                        "cols": 20,
+                        "pitch_mm": 3.2,
+                        "core_corners_px": [[20, 20], [220, 20], [220, 220], [20, 220]],
+                        "pixel_overrides": {"401": [[80, 8], [90, 8], [90, 18], [80, 18]]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            electrode_map = load_electrode_map(map_yaml)
+            map_json = root / "map.json"
+            save_electrode_map(map_json, electrode_map)
+            loaded = load_electrode_map(map_json)
+            self.assertEqual(loaded[401].geometry_source, "calibrated")
+            image = np.full((240, 240, 3), 245, dtype=np.uint8)
+            image_path = root / "chip.png"
+            cv2.imwrite(str(image_path), image)
+            outputs = render_electrode_overlay(
+                image_path,
+                loaded,
+                root / "overlay.png",
+                zoom_electrodes=[1, 210],
+            )
+            self.assertEqual(len(outputs), 3)
+            self.assertTrue(all(path.is_file() for path in outputs))
+
+    def test_dmf_evaluation_and_timeseries_export(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mask = np.zeros((100, 100), dtype=np.uint8)
+            mask[2:5, 2:5] = 255
+            cv2.imwrite(str(root / "mask.png"), mask)
+            map_path = root / "map.yaml"
+            map_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "rows": 20,
+                        "cols": 20,
+                        "pitch_mm": 3.2,
+                        "core_corners_px": [[0, 0], [100, 0], [100, 100], [0, 100]],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            truth = root / "truth.csv"
+            truth.write_text(
+                "video_id,frame_id,mask_path,source_electrode,target_electrode,state_gt\n"
+                "v1,0,mask.png,1,2,Partial\n",
+                encoding="utf-8",
+            )
+            results = root / "results.csv"
+            results.write_text(
+                "video_id,experiment_id,frame_id,timestamp_s,mask_path,centroid_u_px,centroid_v_px,"
+                "detected,processing_time_ms,pipeline_time_ms,state_pred,state_gt,source_electrode,"
+                "target_electrode,source_coverage,target_coverage,distance_to_target_mm,velocity_mm_s\n"
+                "v1,e1,0,0.0,mask.png,3,3,True,1,2,Unknown,Partial,1,2,1,0,3.2,0\n",
+                encoding="utf-8",
+            )
+            summary = evaluate_results(results, truth, root / "evaluation", electrode_map_path=map_path)
+            self.assertEqual(summary["dmf_metrics"]["overall"]["electrode_assignment_accuracy"], 1.0)
+            self.assertEqual(summary["dmf_metrics"]["partial"]["frames"], 1)
+            self.assertEqual(summary["dmf_metrics"]["overall"]["mean_source_coverage_error"], 0.0)
+            output = export_transport_timeseries(results, root / "timeseries.csv", experiment_id="e1")
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["target_coverage"], "0")
 
 
 if __name__ == "__main__":

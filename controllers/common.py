@@ -34,6 +34,7 @@ from dmf import (
     SimulatedCamera,
     SimulatedDroplet,
     build_multi_droplet_assignments,
+    replan_multi_assignments_after_fault,
     cell_center_mm,
     cell_from_electrode_id,
     detection_in_cell,

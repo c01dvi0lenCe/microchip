@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Mapping
+import json
 
 from .calibration import ArrayGridCalibration
 from .electrode_map import ElectrodeMap
@@ -22,13 +23,22 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return payload
 
 
+def load_mapping(path: Path) -> dict[str, Any]:
+    if path.suffix.lower() == ".json":
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"configuration root must be a mapping: {path}")
+        return payload
+    return load_yaml(path)
+
+
 def resolve_path(base_dir: Path, value: object) -> Path:
     path = Path(str(value))
     return path if path.is_absolute() else (base_dir / path).resolve()
 
 
 def load_electrode_map(path: Path) -> ElectrodeMap:
-    values = load_yaml(path)
+    values = load_mapping(path)
     rows = int(values.get("rows", 20))
     cols = int(values.get("cols", 20))
     if (rows, cols) != (20, 20):
@@ -53,3 +63,25 @@ def load_electrode_map(path: Path) -> ElectrodeMap:
         for electrode_id, polygon in raw_overrides.items()
     }
     return ElectrodeMap.from_calibration(calibration, overrides)
+
+
+def save_electrode_map(path: Path, electrode_map: ElectrodeMap) -> None:
+    overrides = {
+        str(region.electrode_id): [[float(x), float(y)] for x, y in region.polygon_px]
+        for region in electrode_map
+        if region.geometry_source == "calibrated"
+    }
+    payload = {
+        "rows": electrode_map.calibration.rows,
+        "cols": electrode_map.calibration.cols,
+        "pitch_mm": electrode_map.calibration.pitch_mm,
+        "core_corners_px": [list(point) for point in electrode_map.calibration.corners_px],
+        "pixel_overrides": overrides,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() == ".json":
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to save YAML electrode maps")
+    path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")

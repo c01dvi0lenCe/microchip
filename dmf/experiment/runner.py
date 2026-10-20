@@ -69,6 +69,7 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
                 VideoSource(config['source']) if mode=='offline' else LiveSource(config['source']))
         if emergency():raise InterruptedError('experiment stop requested')
         hwconfig=dict(config);hwconfig['_emergency']=emergency
+        hwconfig['_transaction_observer']=logger.transaction_event
         actuator=(actuator_factory or AMActuator)(mode,hwconfig)
         if mode=='experiment':command_log(time.monotonic(),'Startup release',CommandResult('ALL_OFF',True,True,changes={}))
         for packet in source:
@@ -144,6 +145,9 @@ def run_experiment(config_path,mode=None,*,source_factory=None,segmenter_factory
         if source is not None:
             try:source.close()
             except Exception as exc:status='error';reason=reason+'; source close: '+str(exc)
+        if logger.electrode_log is not None:
+            logger.electrode_log.close()
+            if logger.electrode_log.error:status='error';reason+='; '+logger.electrode_log.error
         report={'experiment_id':experiment_id,'mode':mode,'status':status,'reason':reason,'frames':processed,
             'release_confirmed':release_confirmed,
             'output_dir':config['output_dir'],'synthetic_test_only':config.get('synthetic_test_only',False)}
