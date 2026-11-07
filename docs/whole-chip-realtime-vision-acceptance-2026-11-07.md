@@ -63,3 +63,14 @@ python -u -c "import cv2,torch,unittest;cv2.setNumThreads(1);torch.set_num_threa
 python -m compileall -q main.py app_controller.py controllers dmf simulation validation
 python -m validation.closed_loop_chain.run_validation
 ```
+
+## 干净克隆与Git交付核查
+
+- 来源基线：`0d9559cca781565275ab5736923d3808ca8238fb`；新功能源码：`b93f3b4364bcf2b1772503facbc68aea62fa63b8`。后续收尾提交仅更新本报告、计划和实现状态，不改变已验证源码。
+- 在独立本地Git克隆中检查上述源码，无原仓库未跟踪文件、模型或SDK。普通Python环境未安装SMP；原始GUI启动也未导入Torch/Torchvision/SMP/厂商SDK绑定。
+- 克隆GUI启动通过：420电极、默认batch1、相机及串口均未连接、活动电极为空、视觉控制禁用；以禁止真实串口打开的检查器确认无自动输出。预检在缺模型/SDK时仅给警告，基础GUI可运行。
+- 两个新增CLI的`--help`通过；克隆中的53项新增测试全部通过（24.728秒），克隆工作区保持干净。此检查验证源码完整性，不等于另一台电脑已完成全新依赖安装或真实相机验收。
+- 已推送`origin/codex/whole-chip-realtime-vision`新分支，未强推、未合并主分支、未自动建立PR。只上传源码/模板/依赖/测试/文档；模型、SDK、原视频、GT和论文均未上传。
+- 用户原有未跟踪论文内容、图稿预览和研究HTML等仍原样保留，不为清理Git状态而删除。
+
+分支：[codex/whole-chip-realtime-vision](https://github.com/c01dvi0lenCe/microchip/tree/codex/whole-chip-realtime-vision)。另一台电脑按部署说明复制模型包并配置SDK后，才能进行尚待完成的10分钟相机验收。

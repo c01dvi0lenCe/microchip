@@ -12,5 +12,7 @@
 - [x] Worker tests RED/GREEN:single-slot replace, frame snapshot/result identity, no partial output, errors/stop/journal flush, raw timestamps and counters. No actuator imports or output fields.
 - [x] UI tests RED/GREEN:start/stop/view/save/full-chip rectangle selection, poll-only Tk, match processed frame, preserve raw recording/manual/openloop, disabled visual control; local camera config and portable launch/preflight.
 - [x] GPU export and120ROI parity;63wholeframe acceptance sources(30+30+3 lowlight), raw inputs/checkpoints unchanged, actual performance/errors only.
-- [ ] Independent spec then quality review; local/compile/full/7chains; clean clone imports/start/help. Fix regressions with tests.
-- [ ] Source-only staged diff/secret/size audit; feature commit then non-force push origin; report branch/commits/runtime evidence/model-transfer package and target-machine checklist.
+- [x] Independent spec then quality review; local/compile/full/7chains; clean clone imports/start/help. Fix regressions with tests.
+- [x] Source-only staged diff/secret/size audit; feature commit then non-force push origin; report branch/commits/runtime evidence/model-transfer package and target-machine checklist.
+
+Execution: baseline0d9559c; implementationb93f3b4;1388 full tests (1 optional skip),53 new tests in an independent clean clone,7 software chains.120/120 ROI exact parity and63/63 native full-image replay. Actual44 batch-audit pixel differences caused delivery defaultbatch1. Mean4494.06ms/image: target-camera10-minute acceptance and physical closed-loop remain explicitly pending. See `docs/whole-chip-realtime-vision-acceptance-2026-11-07.md`.
