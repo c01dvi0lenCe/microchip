@@ -12,3 +12,13 @@ data/masks/
 data/annotations/
 data/splits/
 results/
+.planning/
+.venv*/
+models/
+*.pt
+*.pth
+*.onnx
+*.torchscript
+configs/*.local.yaml
+configs/*.local.yml
+configs/*.local.json

@@ -67,8 +67,10 @@ class CameraControllerMixin:
 
     def _show_camera_frame(self, frame_rgb):
         image = Image.fromarray(frame_rgb)
+        native_size=image.size
         target_w, target_h = self._camera_preview_target_size()
         image.thumbnail((target_w, target_h), RESAMPLE_FILTER)
+        self._camera_display_geometry=(*native_size,*image.size)
         photo = ImageTk.PhotoImage(image=image, master=self.camera_label)
         self._update_camera_label(photo)
 
@@ -98,6 +100,8 @@ class CameraControllerMixin:
         if adapter is None:
             try:
                 config_path = Path(__file__).resolve().parents[1] / "configs" / "camera_mvs.yaml"
+                local_path=config_path.with_name('camera_mvs.local.yaml')
+                if local_path.exists():config_path=local_path
                 config = load_yaml(config_path)
                 source_config = config["source"]
                 self._hardware_camera_source = LiveSource(source_config,
@@ -274,11 +278,15 @@ class CameraControllerMixin:
         self.camera_recording_timer_after_id = None
 
     def _put_latest_camera_packet(self, packet):
+        if not isinstance(packet,Exception) and hasattr(self,'_submit_realtime_packet'):self._submit_realtime_packet(packet)
         try:
             self._hardware_camera_queue.put_nowait(packet)
         except queue.Full:
             try:
                 self._hardware_camera_queue.get_nowait()
+                self._hardware_preview_overwrites=getattr(self,'_hardware_preview_overwrites',0)+1
+                detector=getattr(self,'_vision_detector',None)
+                if detector is not None and getattr(self,'_vision_accepting',False):detector.note_preview_overwrite()
             except queue.Empty:
                 pass
             try:
@@ -296,13 +304,17 @@ class CameraControllerMixin:
             self._hardware_camera_failed(item)
             return
         if item is not None:
+            self._latest_camera_packet=item
             self.latest_camera_frame_bgr = item.image_bgr
             frame_rgb = cv2.cvtColor(item.image_bgr, cv2.COLOR_BGR2RGB)
-            self._show_camera_frame(frame_rgb)
+            if (not getattr(self,'_operator_only',False) or self.vision_view_var.get()=='原图'
+                    or self._vision_latest_result is None):self._show_camera_frame(frame_rgb)
         if self.camera_running:
             self.camera_after_id = self.root.after(40, self._poll_hardware_camera)
 
     def _hardware_camera_failed(self, error):
+        if hasattr(self,'stop_realtime_detection'):self.stop_realtime_detection()
+        self._latest_camera_packet=None
         self.camera_running = False
         self.camera_recording = False
         self._cancel_camera_recording_timer()
@@ -325,6 +337,8 @@ class CameraControllerMixin:
         self.log(f"MVS 相机采集失败：{error}")
 
     def stop_camera(self):
+        if hasattr(self,'stop_realtime_detection'):self.stop_realtime_detection()
+        self._latest_camera_packet=None
         if self.auto_running:
             self.stop_auto_control("关闭视觉预览")
         if self.camera_recording and getattr(self, "_hardware_camera_source", None) is not None:

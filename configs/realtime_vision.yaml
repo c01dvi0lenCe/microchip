@@ -1,0 +1,4 @@
+model_package: models/g4_unet
+device: auto
+batch_size: 1
+output_root: results/realtime_vision

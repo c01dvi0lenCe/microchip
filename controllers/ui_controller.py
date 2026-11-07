@@ -687,10 +687,12 @@ class UiControllerMixin:
         self.btn_camera_photo.pack(side="right", padx=(0, 6))
         self.btn_camera_photo.config(state="disabled")
 
+        if self._operator_only:self._build_realtime_vision_controls(card)
+
         camera_container = tk.Frame(card, bg=self.colors["panel_alt"], bd=1, relief="solid")
-        camera_container.pack(padx=8, pady=(0, 8))
+        camera_container.pack(padx=8, pady=(0, 8),fill='both' if self._operator_only else 'none',expand=self._operator_only)
         camera_container.pack_propagate(False)
-        camera_container.config(width=560, height=560)
+        camera_container.config(width=560, height=400 if self._operator_only else 560)
 
         self.camera_label = tk.Label(
             camera_container,
@@ -700,6 +702,9 @@ class UiControllerMixin:
             fg=self.colors["muted"],
         )
         self.camera_label.pack(fill="both", expand=True)
+        if self._operator_only:
+            self.camera_label.bind('<ButtonPress-1>',self._vision_roi_press)
+            self.camera_label.bind('<ButtonRelease-1>',self._vision_roi_release)
         return card
 
     def is_simulation_mode(self):

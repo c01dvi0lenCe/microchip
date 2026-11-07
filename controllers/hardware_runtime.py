@@ -411,6 +411,9 @@ class HardwareRuntimeMixin:
             self._experiment_closing = True
             self.stop_experiment()
             return
+        if self._stop_realtime_for_close():
+            self.root.after(50,self.on_close)
+            return
         source = getattr(self, '_hardware_camera_source', None)
         if source is not None and source.worker.is_alive():
             self.auto_running = False
