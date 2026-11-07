@@ -1,0 +1,23 @@
+{
+  "schema": "dmf_photo_registration_inputs_v1",
+  "user_confirmed_industrial_camera_photos": true,
+  "source_confirmation": "User supplied the photo directory and confirmed industrial-camera source and pre-experiment use in this conversation.",
+  "use_scope": "pre_experiment_only",
+  "initialization_note": "Approximate native-pixel core quadrilaterals from assistant visual inspection. Navigation only, not manually reviewed observations or ground truth.",
+  "references": [
+    {
+      "resource_id": "camera_20261022_160200_288979",
+      "image": "D:/Learn/ZJU/第二章 单液滴视觉闭环/照片样本/2026-10-22/camera_20261022_160200_288979.png",
+      "sha256": "c08cb49f72163a2602444d63e5f3037c6b4f938ab42468ba9a13e90a9d382890",
+      "image_size": [5472, 3648],
+      "initial_core_corners_px": [[1200, 580], [3570, 620], [3540, 2980], [1170, 2950]]
+    },
+    {
+      "resource_id": "camera_20261022_160204_057654",
+      "image": "D:/Learn/ZJU/第二章 单液滴视觉闭环/照片样本/2026-10-22/camera_20261022_160204_057654.png",
+      "sha256": "650824622f58c268cacea32d021ea83c60239041e751d0559e0cae64712ccbab",
+      "image_size": [5472, 3648],
+      "initial_core_corners_px": [[1200, 580], [3570, 620], [3540, 2980], [1170, 2950]]
+    }
+  ]
+}

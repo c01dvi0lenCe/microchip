@@ -1,0 +1,26 @@
+{
+  "schema": "geometry_single_step_v1",
+  "title": "实验一：基于真实电极几何的单液滴到达状态识别仿真",
+  "map_path": "D:/Learn/ZJU/第二章 单液滴视觉闭环/电极数字地图/2026-10-21_FBC6-3_真实轮廓_编号确认_v1/electrode_design_map.json",
+  "template_path": "D:/Learn/ZJU/第二章 单液滴视觉闭环/真实分割研究/2026-10-21_Pilot分割基线_v2_同轮采集确认/reviewed_snapshot/masks/sample_0002.png",
+  "parameters": {
+    "source": 190,
+    "target": 191,
+    "diameter_mm": 4.0,
+    "spacer_height_mm": 0.8,
+    "duration_s": 3.0,
+    "dt_s": 0.01,
+    "request_s": 0.5,
+    "applied_delay_s": 0.04,
+    "response_delay_s": 0.18,
+    "speed_mm_s": 4.8,
+    "max_stretch": 1.55,
+    "shape_tau_s": 0.1,
+    "camera_fps": 20.0,
+    "exposure_s": 0.008,
+    "processing_delay_s": 0.04,
+    "pixels_per_mm": 40.0,
+    "position_noise_mm": 0.0,
+    "seed": 264900
+  }
+}

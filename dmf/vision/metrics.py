@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Iterable, Optional, Sequence
 
 import numpy as np
@@ -96,24 +95,46 @@ def state_classification_metrics(
     if len(predicted) != len(ground_truth):
         raise ValueError("predicted and ground-truth state arrays must have equal length")
     labels = [state.value for state in DropletState if state is not DropletState.UNKNOWN]
-    matrix = {truth: {pred: 0 for pred in labels} for truth in labels}
+    prediction_labels = labels + [DropletState.UNKNOWN.value]
+    matrix = {truth: {pred: 0 for pred in prediction_labels} for truth in labels}
+    unknown_gt_count = 0
     for pred_value, truth_value in zip(predicted, ground_truth):
         pred = DropletState.parse(pred_value)
         truth = DropletState.parse(truth_value)
-        if pred is DropletState.UNKNOWN or truth is DropletState.UNKNOWN:
+        if truth is DropletState.UNKNOWN:
+            unknown_gt_count += 1
             continue
         matrix[truth.value][pred.value] += 1
-    per_class = {}
-    for label in labels:
-        tp = matrix[label][label]
-        fp = sum(matrix[truth][label] for truth in labels if truth != label)
-        fn = sum(matrix[label][pred] for pred in labels if pred != label)
-        precision = tp / (tp + fp) if tp + fp else 0.0
-        recall = tp / (tp + fn) if tp + fn else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        per_class[label] = {"precision": precision, "recall": recall, "f1": f1}
-    macro_f1 = sum(values["f1"] for values in per_class.values()) / len(labels)
-    return {"labels": labels, "confusion_matrix": matrix, "per_class": per_class, "macro_f1": macro_f1}
+
+    def summarize(columns):
+        per_class = {}
+        for label in labels:
+            tp = matrix[label][label]
+            fp = sum(matrix[truth][label] for truth in labels if truth != label)
+            support = sum(matrix[label][pred] for pred in columns)
+            fn = support - tp
+            precision = tp / (tp + fp) if tp + fp else 0.0
+            recall = tp / support if support else 0.0
+            f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+            per_class[label] = {"precision": precision, "recall": recall, "f1": f1,
+                                "support": support, "tp": tp, "fp": fp, "fn": fn}
+        return {"per_class": per_class,
+                "macro_f1": sum(values["f1"] for values in per_class.values()) / len(labels)}
+
+    known_gt_count = len(ground_truth) - unknown_gt_count
+    abstentions = sum(matrix[label][DropletState.UNKNOWN.value] for label in labels)
+    conditional = summarize(labels)
+    conditional.update({
+        "denominator": known_gt_count - abstentions,
+        "description": "Conditional on known GT AND non-Unknown prediction; not the full-sample score.",
+        "confusion_matrix": {truth: {pred: matrix[truth][pred] for pred in labels} for truth in labels},
+    })
+    return {"labels": labels, "prediction_labels": prediction_labels, "confusion_matrix": matrix,
+            **summarize(prediction_labels), "total_count": len(ground_truth),
+            "known_gt_count": known_gt_count, "unknown_gt_count": unknown_gt_count,
+            "abstention_count": abstentions,
+            "abstention_rate": abstentions / known_gt_count if known_gt_count else None,
+            "conditional_five_class": conditional}
 
 
 def mean_available(values: Iterable[Optional[float]]) -> Optional[float]:

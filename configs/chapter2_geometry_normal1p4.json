@@ -1,0 +1,11 @@
+{
+  "schema": "geometry_normal1p4_v2",
+  "source": 190,
+  "target": 191,
+  "diameter_mm": 4.0,
+  "speed_mm_s": 1.4,
+  "duration_s": 6.0,
+  "seed": 264900,
+  "scenario": "normal",
+  "description": "Video-informed nominal peak, not a physical calibration; all other legacy single-step parameters and arrival gates unchanged."
+}

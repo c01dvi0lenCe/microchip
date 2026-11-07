@@ -27,7 +27,9 @@ class StateTests(unittest.TestCase):
         self.assertEqual(self.state(velocity=2), S.MOVING)
         self.assertEqual(self.state(eta_target=.35, eta_source=.5), S.PARTIAL)
         self.assertEqual(self.state(eta_target=.9, eta_source=.02), S.ARRIVED)
-        self.assertEqual(self.state(spatial_ok=False), S.DEVIATION)
+        r=StateRecognizer(self.config)
+        self.assertEqual(r.recognize(observation(spatial_ok=False),0.),S.UNKNOWN)
+        self.assertEqual(r.recognize(observation(spatial_ok=False),.1),S.DEVIATION)
 
     def test_invalid_is_unknown_not_arrived(self):
         self.assertEqual(self.state(valid=False, eta_target=1), S.UNKNOWN)
@@ -42,8 +44,8 @@ class StateTests(unittest.TestCase):
         self.assertNotEqual(r.recognize(arrived,.4), S.ARRIVED)
         self.assertEqual(r.recognize(arrived,.6), S.ARRIVED)
 
-    def test_deviation_overrides_arrived_geometry(self):
-        self.assertEqual(self.state(eta_target=.9,eta_source=0,temporal_ok=False),S.DEVIATION)
+    def test_temporal_conflict_blocks_arrival_without_claiming_deviation(self):
+        self.assertEqual(self.state(eta_target=.9,eta_source=0,temporal_ok=False),S.UNKNOWN)
 
 
 class PolicyTests(unittest.TestCase):

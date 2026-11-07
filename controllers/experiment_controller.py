@@ -114,6 +114,13 @@ class ExperimentControllerMixin:
             self.experiment_status_var.set(f'示例生成失败：{exc}')
 
     def start_experiment(self):
+        if not getattr(self, '_research_ui_enabled', False):
+            self.experiment_status_var.set('研究配置已移至命令行入口 run_experiment.py')
+            self.log('研究入口已从日常界面移除，请使用独立命令行配置与运行。')
+            return False
+        if getattr(self, '_timed_mix_owned', False):
+            messagebox.showwarning('电极正在占用', '请先停止定时四宫格，并等待在途事务结束。')
+            return False
         if self._experiment_active:
             return False
         if self.is_connected:

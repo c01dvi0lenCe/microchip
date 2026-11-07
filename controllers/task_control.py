@@ -54,6 +54,12 @@ class TaskControlMixin:
         return f"闭环: {self.operation_var.get()}运行中"
 
     def start_auto_control(self):
+        if self._operator_only:
+            self.log('真实视觉闭环尚未验收；请在手动电极页使用定时开环')
+            return False
+        if getattr(self, '_timed_mix_owned', False):
+            self.log('定时四宫格运行中，请先停止')
+            return
         if self._experiment_active:
             return
         if not self.is_simulation_mode():
@@ -70,6 +76,11 @@ class TaskControlMixin:
         self._start_auto_with_planned(planned)
 
     def _start_auto_with_planned(self, planned):
+        if self._operator_only:
+            self.log('真实视觉闭环尚未验收，规划回调不启动电极控制')
+            return False
+        if getattr(self, '_timed_mix_owned', False):
+            return
         if self._experiment_active:
             return
         if not self._operation_ready_to_start(planned):
@@ -124,6 +135,8 @@ class TaskControlMixin:
     def reset_simulation(self):
         if not self.is_simulation_mode():
             return
+        if getattr(self, '_timed_mix_owned', False):
+            self.stop_timed_mixing()
         self.stop_auto_control("复位仿真")
         self._clear_planned_operation()
         self.detected_position = None

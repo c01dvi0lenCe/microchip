@@ -1,0 +1,7 @@
+schema: chapter2_s2_development_v1
+mode: simulation
+development_seeds: [262000, 262001, 262002]
+methods: [B_single_frame, BTQ, BTQ+S, BTQ+K, F_arrival]
+conditions: [A_normal, B_flash_short, B_flash_window, C_jump_short, C_jump_persistent, D_tail_false, D_tail_true_cost, E_lowconf_false, E_lowconf_true, E_highconf_false, F_jitter, F_dropout, F_gap]
+duration_s: 4.0
+followup_s: 1.0

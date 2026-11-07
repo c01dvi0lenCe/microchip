@@ -1,4 +1,4 @@
-"""Application entrypoint for the DMF upper-computer simulator."""
+"""Daily real-experiment operator entry; no simulated observations or motion."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from app_controller import STM32MatrixController
 
 def main() -> None:
     root = tk.Tk()
-    STM32MatrixController(root)
+    STM32MatrixController(root, operator_only=True)
     root.mainloop()
 
 

@@ -1,0 +1,29 @@
+{
+  "schema": "chapter2_geometry_exp1b_random_development_v1",
+  "extends": "proposals/chapter2_geometry_exp1b_random_v1.json",
+  "base_sha256": "93d0de69c1c64c6772c4a46c97f1991489d34232136877be10747a4f824f4b03",
+  "status": "IMPLEMENTATION_AND_TWO_DEVELOPMENT_SEEDS_ALLOWED",
+  "formal_execution_allowed": false,
+  "development_seed_slots": {"268000": 0, "268001": 10},
+  "development_max_unique_seeds": 2,
+  "development_max_caches": 24,
+  "TF_revision": {
+    "start_rule": "first capture at or after permanent_stall_started_s + fixed_offset_s",
+    "fixed_offset_s": 0.20,
+    "consecutive_frames": {"low": [7,9], "high": [10,12]},
+    "no_redraw": true,
+    "require_entire_episode_after_stall": true,
+    "persist_times": ["permanent_stall_started_s", "false_target_start_s", "false_target_end_s", "actual_false_frames"]
+  },
+  "reference_revision": {
+    "status_values": ["completed_by_H", "dwell_incomplete_at_H", "approaching_at_H", "permanent_stall_without_reference", "no_reference_by_H"],
+    "confirmation_while_reference_incomplete": "confirmation_reference_pending_at_H",
+    "no_confirmation_while_reference_incomplete": "no_confirmation_reference_pending_at_H",
+    "permanent_stall_no_confirmation": "permanent_stall_no_confirmation",
+    "completed_reference_without_confirmation": "reference_not_confirmed",
+    "fixed_deadline_metrics_retained": true,
+    "pending_delivery_does_not_erase_missed_reference_by_H": true,
+    "actual_physical_wrong_switch": "not_evaluated"
+  },
+  "scope": "Only independent implementation, hand tests and these two development seeds; no 266000-266019, no experiment-two performance run."
+}

@@ -159,6 +159,7 @@ class SimulationControllerMixin:
         return True
 
     def _reset_droplets_for_operation(self):
+        if self._operator_only:return
         operation = self.operation_var.get()
         self.split_progress = 0.0
         self.split_attempts = 0
@@ -285,6 +286,7 @@ class SimulationControllerMixin:
         return positions
 
     def set_manual_droplet(self, cell):
+        if self._operator_only:return False
         if cell not in LAYOUT_CELLS:
             self.log("手动液滴位置需要落在电极或储液池上")
             return False
@@ -374,6 +376,7 @@ class SimulationControllerMixin:
         return moved
 
     def _schedule_manual_simulation_loop(self):
+        if self._operator_only:return
         if self.manual_after_id is None:
             self.manual_after_id = self.root.after(AUTO_LOOP_INTERVAL_MS, self._manual_simulation_loop)
 

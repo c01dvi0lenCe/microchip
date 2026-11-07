@@ -1,0 +1,18 @@
+{
+  "schema": "dmf_electrode_design_profile_v1",
+  "source_kind": "design_gerber",
+  "source_sha256": "f8baf42ac7453d242e4cbac714f6b92de7203ac3c9d4e7fabdead22c494f7e0c",
+  "pitch_mm": 3.2,
+  "core_top_left_center_gerber_mm": [-44.559, 168.362],
+  "binding": {
+    "confirmed": true,
+    "status": "user_confirmed_pc_layout_and_orientation",
+    "evidence_date": "2026-10-21",
+    "evidence": "User confirmed shape-only FPC use, control electrodes match PC code, then confirmed four-corner front-view direction in this chat",
+    "orientation": "front_top_left_1_top_right_20_bottom_left_381_bottom_right_400",
+    "netlist_verified": false,
+    "electrical_continuity_verified": false
+  },
+  "match_tolerances_mm": {"core": 0.005, "small": 0.005, "large": 1.5, "corner": 2.5},
+  "matching_tolerance_note": "Only source-to-code-template center association tolerances, NOT camera or physical measurement precision; all actual vertices/centroids are retained"
+}

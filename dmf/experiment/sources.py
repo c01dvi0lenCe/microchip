@@ -6,9 +6,11 @@ import time
 import cv2
 import numpy as np
 from concurrent.futures import Future
-from dmf.vision.contracts import FramePacket
+from dmf.vision.contracts import FramePacket, FrameTiming
+from dataclasses import replace
+import csv
 from dmf.vision.timebase import VideoTimestampResolver
-from dmf.recording import load_recorded_timestamps
+from dmf.recording import load_recorded_timestamps, sidecar_paths
 
 
 class VideoSource:
@@ -18,6 +20,11 @@ class VideoSource:
         try:
             self.clock=VideoTimestampResolver(float(self.capture.get(cv2.CAP_PROP_FPS) or config.get('fps_fallback',0)))
             self.recorded_times=load_recorded_timestamps(config['video'],config.get('timestamps_csv'))
+            self.recorded_metadata=None
+            if self.recorded_times is not None:
+                path=config.get('timestamps_csv') or sidecar_paths(config['video'])['timestamps']
+                with open(path,encoding='utf-8',newline='') as handle:
+                    self.recorded_metadata=list(csv.DictReader(handle))
             if self.recorded_times is not None and len(self.recorded_times)!=int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT)):
                 raise ValueError('video frame count does not match recorded timestamps')
         except Exception:self.capture.release();raise
@@ -35,7 +42,18 @@ class VideoSource:
             if self.index>=len(self.recorded_times):raise ValueError('video has extra frames without timestamps')
             t,kind=self.recorded_times[self.index],'host_receive_perf_counter'
         else:t,kind=self.clock.resolve(self.index,self.capture.get(cv2.CAP_PROP_POS_MSEC))
-        packet=FramePacket('offline',self.index,t,kind,frame);self.index+=1;return packet
+        if self.recorded_metadata is not None:
+            row=self.recorded_metadata[self.index]
+            def integer(key):return int(row[key]) if row.get(key) not in (None,'') else None
+            timing=FrameTiming(integer('sdk_frame_number'),integer('host_receive_monotonic_ns'),
+                integer('host_receive_perf_counter_ns'),integer('device_timestamp_raw'),
+                'recorded_host_relative','host_receive',sdk_host_timestamp_raw=integer('sdk_host_timestamp_raw'),
+                receive_utc_ns=integer('host_utc_ns'),
+                relative_anchor_perf_counter_ns=int(self.recorded_metadata[0]['host_receive_perf_counter_ns']))
+        else:
+            timing=FrameTiming(clock_domain='video_relative',
+                timing_quality='video_pts' if kind=='video_pts' else 'fps_unverified')
+        packet=FramePacket('offline',self.index,t,kind,frame,timing);self.index+=1;return packet
     def close(self):self.capture.release()
 
 
@@ -65,7 +83,7 @@ class LiveSource:
         self.received_first_frame=False
         if self.startup_timeout<=0:raise ValueError('startup_timeout_s must be positive')
         if self.capture_stall_timeout<=self.timeout:raise ValueError('capture_stall_timeout_s must exceed frame_timeout_s')
-        self.queue=queue.Queue(maxsize=1);self.stop=threading.Event();self.index=0
+        self.queue=queue.Queue(maxsize=1);self.stop=threading.Event();self.index=0;self.queue_overwrites=0
         self.commands=queue.Queue()
         self.command_lock=threading.Lock()
         self.accepting_commands=True
@@ -79,6 +97,7 @@ class LiveSource:
         except queue.Full:
             try:self.queue.get_nowait()
             except queue.Empty:pass
+            else:self.queue_overwrites+=1
             try:self.queue.put_nowait(value)
             except queue.Full:pass
 
@@ -103,10 +122,20 @@ class LiveSource:
                 timeout_started=None
                 if not isinstance(image,np.ndarray) or image.ndim!=3 or image.shape[2]!=3 or image.dtype!=np.uint8:
                     raise ValueError('camera.read must return HxWx3 uint8 BGR')
-                metadata=getattr(camera,'last_frame_metadata',None)
-                t=metadata['host_receive_monotonic_ns']/1e9 if metadata else time.monotonic()
+                metadata=getattr(camera,'last_frame_metadata',None) or {}
+                received=metadata.get('host_receive_monotonic_ns',time.monotonic_ns())
+                def integer(key):
+                    value=metadata.get(key)
+                    return int(value) if value not in (None,'') else None
+                timing=FrameTiming(integer('sdk_frame_number'),received,
+                    integer('host_receive_perf_counter_ns') if metadata else time.perf_counter_ns(),
+                    integer('device_timestamp_raw'),'host_monotonic',
+                    metadata.get('timing_quality','host_receive'),integer('exposure_start_ns'),
+                    metadata.get('exposure_clock_domain','unknown'),task_epoch=integer('task_epoch'),
+                    sdk_host_timestamp_raw=integer('sdk_host_timestamp_raw'),receive_utc_ns=integer('host_utc_ns'))
+                t=received/1e9
                 kind='host_receive_monotonic' if metadata else 'host_monotonic'
-                self._put((t,image.copy(),kind))
+                self._put((t,image.copy(),kind,timing))
         except Exception as exc:
             if camera is not None and getattr(camera,'recording_journal',None) is not None:
                 camera.recording_journal.log.error=str(exc)
@@ -143,8 +172,9 @@ class LiveSource:
         try:item=self.queue.get(timeout=wait_timeout)
         except queue.Empty:raise TimeoutError('camera frame timeout') from None
         if isinstance(item,Exception):raise item
-        t,image,kind=item
+        t,image,kind,timing=item
         if time.monotonic()-t>self.timeout:raise TimeoutError('stale camera frame')
         self.received_first_frame=True
-        packet=FramePacket('live',self.index,t,kind,image);self.index+=1;return packet
+        packet=FramePacket('live',self.index,t,kind,image,
+            replace(timing,queue_overwrites=self.queue_overwrites));self.index+=1;return packet
     def close(self):self.stop.set() # SDK read/close must be bounded; daemon protects the CLI.

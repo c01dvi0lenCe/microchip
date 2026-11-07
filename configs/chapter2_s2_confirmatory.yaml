@@ -1,0 +1,9 @@
+schema: chapter2_s2_confirmatory_v1
+mode: simulation
+formal_seeds: [263000, 263001, 263002, 263003, 263004, 263005, 263006, 263007, 263008, 263009, 263010, 263011, 263012, 263013, 263014, 263015, 263016, 263017, 263018, 263019]
+methods: [B_single_frame, BTQ, BTQ+S, BTQ+K, F_arrival]
+conditions: [A_normal, B_flash_short, B_flash_window, C_jump_short, C_jump_persistent, D_tail_false, D_tail_true_cost, E_lowconf_false, E_lowconf_true, E_highconf_false, F_jitter, F_dropout, F_gap]
+duration_s: 4.0
+followup_s: 1.0
+bootstrap_repeats: 2000
+figure_example: A_normal_263000

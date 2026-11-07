@@ -1,0 +1,32 @@
+mode: simulation
+# Synthetic, normalized pitch units; no serial, camera SDK or learned U-Net.
+# null uses the existing 420-ID template (including L-shaped periphery), NOT
+# measured 3.2-mm geometry. Set a real map YAML path when independently available.
+simulation:
+  map_path: null
+  route: [190, 191, 192, 172]
+  dt_s: 0.01
+  max_time_s: 24.0
+  speed: 1.5
+  response_delay_s: 0.18
+  ack_delay_s: 0.04
+  camera_fps: 20.0
+  exposure_s: 0.008
+  processing_delay_s: 0.04
+  position_noise: 0.018
+  mask_radius_noise: 0.015
+  drop_probability: 0.03
+  fixed_interval_s: 1.2
+  arrival_coverage: 0.85
+  arrival_frames: 5
+  stable_duration_s: 0.25
+  max_frame_gap_s: 0.18
+  stable_span: 0.11
+  position_tolerance: 0.18
+  attempt_timeout_s: 2.6
+  no_progress_s: 1.4
+  max_retries: 2
+  max_recoveries: 1
+  truth_radius: 0.09
+  truth_max_speed: 0.06
+  truth_dwell_s: 0.15

@@ -41,24 +41,29 @@ class UiControllerMixin:
         auto_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
         self.main_notebook.add(manual_page, text="手动电极")
         self.main_notebook.add(auto_page, text="自动化路径规划")
-        self.experiment_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
-        self.main_notebook.add(self.experiment_page, text="第二章单液滴实验")
-        self._build_experiment_page(self.experiment_page)
-        self.main_notebook.bind("<<NotebookTabChanged>>", self.on_experiment_tab_changed)
+        if self._research_ui_enabled:
+            # Explicit opt-in retained only for research adapter regression.
+            self.experiment_page = tk.Frame(self.main_notebook, bg=self.colors["bg"])
+            self.main_notebook.add(self.experiment_page, text="第二章单液滴实验")
+            self._build_experiment_page(self.experiment_page)
+            self.main_notebook.bind("<<NotebookTabChanged>>", self.on_experiment_tab_changed)
 
+        if self._operator_only:self._build_operator_manual_controls(manual_page)
+        else:self._build_timed_mixing_controls(manual_page)
         self.manual_matrix_card, self.manual_canvas = self._build_matrix_card(
             manual_page,
             "手动电极阵列",
-            "手动页：只显示电极开关状态，点击任意电极切换开关",
+            "按画布用途选择开关或任务选点；选点不点亮电极" if self._operator_only else "手动页：只显示电极开关状态，点击任意电极切换开关",
             manual=True,
         )
         self.manual_matrix_card.pack(fill="both", expand=True)
 
-        self._build_auto_control_card(auto_page)
+        if self._operator_only:self._build_operator_visual_controls(auto_page)
+        else:self._build_auto_control_card(auto_page)
         self.path_matrix_card, self.path_canvas = self._build_matrix_card(
             auto_page,
             f"{self.rows}x{self.cols} 自动化路径规划画布",
-            "自动页：点击画布设置当前路径任务点、储液池、目标电极或障碍物",
+            "视觉任务未就绪；开环任务请在手动电极页设置" if self._operator_only else "自动页：点击画布设置当前路径任务点、储液池、目标电极或障碍物",
             manual=False,
         )
         self.path_matrix_card.pack(fill="both", expand=True)
@@ -146,6 +151,8 @@ class UiControllerMixin:
         )
         self.mode_combobox.pack(side="left", padx=(6, 12))
         self.mode_combobox.bind("<<ComboboxSelected>>", self.on_mode_changed)
+        if self._operator_only or self._simulation_only:
+            self.mode_combobox.config(values=(self.mode_var.get(),),state='disabled')
 
         tk.Label(row, text="串口端口", bg=self.colors["panel"], fg=self.colors["text"]).pack(side="left")
         self.port_combobox = ttk.Combobox(row, width=14, state="readonly")
@@ -265,6 +272,8 @@ class UiControllerMixin:
             font=(self.font_family, 9, "bold"),
         )
         self.auto_status_label.pack(side="right")
+
+        self._build_open_loop_controls(card)
 
         step_row = tk.Frame(card, bg=self.colors["panel"])
         self.sim_step_row = step_row
@@ -500,7 +509,7 @@ class UiControllerMixin:
         cell_status_label.pack(side="right")
         self.cell_status_labels.append(cell_status_label)
 
-        if manual:
+        if manual and not self._operator_only:
             manual_tools = tk.Frame(card, bg=self.colors["panel"])
             manual_tools.pack(fill="x", padx=10, pady=(0, 4))
 
@@ -543,6 +552,14 @@ class UiControllerMixin:
         return card, canvas
 
     def _legend_items_for_matrix(self, manual=False):
+        if self._operator_only:
+            return [('命令激活',self.colors['btn_on'],'white'),
+                    ('故障／保护提醒','#F6D5D5',self.colors['text']),
+                    ('任务路径',self.colors['path'],self.colors['text'])]
+        if not manual and self._open_loop_view_active():
+            return [('命令激活',self.colors['btn_on'],'white'),
+                    ('故障／保护提醒','#F6D5D5',self.colors['text']),
+                    ('组路径',self.colors['path'],self.colors['text'])]
         if manual:
             return [
                 ("液滴", self.colors["droplet_a"], "white"),
@@ -686,12 +703,28 @@ class UiControllerMixin:
         return card
 
     def is_simulation_mode(self):
+        if self._operator_only:return False
+        if self._simulation_only:return True
         return self.mode_var.get() == "仿真"
 
     def on_mode_changed(self, _event=None):
+        if self._operator_only:
+            self.mode_var.set('实物');return
+        if self._simulation_only:
+            self.mode_var.set('仿真');return
+        if getattr(self, '_timed_mix_owned', False):
+            self.mode_var.set(self._timed_mix_mode)
+            self.log('定时四宫格运行或事务待确认，请先停止再切换模式')
+            return
         if self._experiment_active:
             self.mode_var.set(self._experiment_previous_mode)
             return
+        if self._open_loop_release_required:
+            requested_mode=self.mode_var.get()
+            # The combobox already changed; finish the old real session first.
+            self.mode_var.set('实物')
+            if not self._release_open_loop_hardware():return
+            self.mode_var.set(requested_mode)
         if self.auto_running:
             self.stop_auto_control("切换运行模式，闭环已停止")
         if self.camera_running:
@@ -709,10 +742,16 @@ class UiControllerMixin:
         self.detected_cell = None
         self.drop_frame_until = 0.0
         self.split_forced_failures_remaining = 0
+        self._open_loop_set_legacy_visible(True)
         self._update_mode_ui()
+        if self.open_loop_kind_var.get()=='多组四宫格':self._open_loop_set_legacy_visible(False)
         self._draw_matrix_canvas()
 
     def on_operation_changed(self, _event=None):
+        if self._operator_only:
+            self.operation_var.set(self.OP_MOVE)
+            self.log('真实开环任务请在手动电极页设置')
+            return False
         if self.auto_running:
             self.stop_auto_control("切换操作类型")
         if self.operation_var.get() == self.OP_SPLIT and not self._valid_split_triplet():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -34,6 +35,27 @@ def polygon_centroid(points: Sequence[Point]) -> Point:
     return x_sum / (3.0 * cross_sum), y_sum / (3.0 * cross_sum)
 
 
+def validated_polygon(points):
+    points=tuple((float(x),float(y)) for x,y in points)
+    if len(points)>1 and points[-1]==points[0]:points=points[:-1]
+    if len(points)<3 or not all(math.isfinite(v) for p in points for v in p):
+        raise ValueError('polygon requires at least three finite points')
+    def cross(a,b,c):return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+    edges=list(zip(points,(*points[1:],points[0])))
+    area=sum(a[0]*b[1]-b[0]*a[1] for a,b in edges)
+    if abs(area)<=1e-9 or any(math.dist(a,b)<=1e-9 for a,b in edges):
+        raise ValueError('degenerate polygon')
+    def on_segment(a,b,p):
+        return abs(cross(a,b,p))<=1e-9 and min(a[0],b[0])-1e-9<=p[0]<=max(a[0],b[0])+1e-9 and min(a[1],b[1])-1e-9<=p[1]<=max(a[1],b[1])+1e-9
+    for i,(a,b) in enumerate(edges):
+        for j,(c,d) in enumerate(edges[i+1:],i+1):
+            if j==i+1 or (i==0 and j==len(edges)-1):continue
+            if ((cross(a,b,c)*cross(a,b,d)<0 and cross(c,d,a)*cross(c,d,b)<0) or
+                    any((on_segment(a,b,c),on_segment(a,b,d),on_segment(c,d,a),on_segment(c,d,b)))):
+                raise ValueError('self-intersecting polygon')
+    return points
+
+
 @dataclass(frozen=True)
 class ElectrodeRegion:
     electrode_id: int
@@ -48,27 +70,46 @@ class ElectrodeRegion:
 
 
 class ElectrodeMap:
-    def __init__(self, calibration: ArrayGridCalibration, regions: Mapping[int, ElectrodeRegion]):
+    def __init__(self, calibration: ArrayGridCalibration, regions: Mapping[int, ElectrodeRegion], metadata=None):
         if set(regions) != set(range(1, 421)):
             missing = sorted(set(range(1, 421)) - set(regions))
             raise ValueError(f"electrode map must contain IDs 1..420; missing={missing[:5]}")
         self.calibration = calibration
         self._regions = dict(regions)
+        self.metadata=dict(metadata or {})
+
+    def validate_frame_shape(self, shape):
+        if len(shape)<2 or min(shape[:2])<=0:raise ValueError('invalid frame shape')
+        expected=self.metadata.get('image_size_px')
+        if expected and tuple(expected)!=(shape[1],shape[0]):
+            raise ValueError('frame size does not match calibrated image/ROI; explicit transform required')
+
+    def quality_manifest(self):
+        return dict(self.metadata,template_region_count=sum(r.geometry_source=='template' for r in self),
+            calibrated_region_count=sum(r.geometry_source=='calibrated' for r in self),
+            physical_calibration_verified=False,
+            geometry_sources={str(r.electrode_id):r.geometry_source for r in self},
+            position_unit='mm',pitch_mm=self.calibration.pitch_mm,
+            pitch_source=self.metadata.get('pitch_source','unspecified_nominal_not_verified'),
+            valid_range=self.metadata.get('valid_range','not_independently_audited'))
 
     @classmethod
     def from_calibration(
         cls,
         calibration: ArrayGridCalibration,
         pixel_overrides: Mapping[int, Sequence[Point]] | None = None,
+        metadata=None,
     ) -> "ElectrodeMap":
         overrides = {int(key): tuple(value) for key, value in (pixel_overrides or {}).items()}
+        if set(overrides)-set(range(1,421)):raise ValueError('invalid override electrode ID')
         regions: dict[int, ElectrodeRegion] = {}
         for electrode_id in range(1, 421):
             cell = cell_from_electrode_id(electrode_id)
             grid_polygon = _grid_polygon(cell)
             polygon_mm = tuple((x * calibration.pitch_mm, y * calibration.pitch_mm) for x, y in grid_polygon)
             if electrode_id in overrides:
-                polygon_px = tuple((float(x), float(y)) for x, y in overrides[electrode_id])
+                polygon_px = validated_polygon(overrides[electrode_id])
+                polygon_mm=validated_polygon(tuple(calibration.pixel_to_mm(p) for p in polygon_px))
                 source = "calibrated"
             else:
                 polygon_px = calibration.grid_polygon_to_pixel(grid_polygon)
@@ -80,11 +121,12 @@ class ElectrodeMap:
                 geometry_type=_geometry_type(cell),
                 center_px=polygon_centroid(polygon_px),
                 polygon_px=polygon_px,
-                center_mm=polygon_centroid(polygon_mm),
+                center_mm=(calibration.pixel_to_mm(polygon_centroid(polygon_px)) if source=='calibrated'
+                           else polygon_centroid(polygon_mm)),
                 polygon_mm=polygon_mm,
                 geometry_source=source,
             )
-        return cls(calibration, regions)
+        return cls(calibration, regions,metadata)
 
     def __len__(self) -> int:
         return len(self._regions)

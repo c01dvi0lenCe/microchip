@@ -1,0 +1,131 @@
+{
+  "schema_version": "chapter2_exp2_sensitivity_protocol/1",
+  "protocol_id": "geometry_exp2_minimal_sensitivity_v1",
+  "approval_date": "2026-11-02",
+  "status": "scope_and_rules_frozen_not_executable",
+  "execution_authorized": false,
+  "implementation_authorized_this_turn": false,
+  "formal_random_performance_authorized": false,
+  "real_hv_authorized": false,
+  "commit_or_push_authorized": false,
+  "model_id_namespace": "D0-D7 are dynamics models; M1/M2/M3 remain controller names",
+  "models": [
+    {"id": "D0", "kind": "numeric", "overrides": {}, "contact_policy": "hard_stop"},
+    {"id": "D1", "kind": "numeric", "overrides": {"velocity_tau_s": 0.2}, "contact_policy": "hard_stop"},
+    {"id": "D2", "kind": "numeric", "overrides": {"velocity_tau_s": 0.3}, "contact_policy": "hard_stop"},
+    {"id": "D3", "kind": "numeric", "overrides": {"acceleration_mm_s2": 3.2}, "contact_policy": "hard_stop"},
+    {"id": "D4", "kind": "numeric", "overrides": {"acceleration_mm_s2": 4.8}, "contact_policy": "hard_stop"},
+    {"id": "D5", "kind": "numeric", "overrides": {"settle_time_s": 0.6}, "contact_policy": "hard_stop"},
+    {"id": "D6", "kind": "numeric", "overrides": {"settle_time_s": 0.9}, "contact_policy": "hard_stop"},
+    {"id": "D7", "kind": "structural_control", "overrides": {}, "contact_policy": "no_target_attraction_with_passive_velocity_decay", "exact_equation_frozen": false}
+  ],
+  "nominal_model_parameters": {
+    "velocity_tau_s": 0.25,
+    "acceleration_mm_s2": 4.0,
+    "settle_time_s": 0.75,
+    "vmax_mm_s": 1.4,
+    "dt_s": 0.01,
+    "applied_delay_s": 0.04,
+    "response_delay_s": 0.18,
+    "camera_fps": 20.0,
+    "diameter_mm": 4.0,
+    "spacer_height_mm_record_only": 0.8
+  },
+  "route": [190, 191, 192, 172],
+  "conditions": [
+    {"id": "normal", "intervention": "none"},
+    {"id": "single_false_target", "fake_exposure_s": 2.05, "fake_electrode": 191, "fake_phase": 1.0},
+    {"id": "turn_single_false_target", "fake_exposure_s": 4.8, "fake_electrode": 192, "fake_phase": 1.0}
+  ],
+  "controllers": ["A_fixed", "M1", "M2", "M3"],
+  "scope": {
+    "open_loop_calibration_paths": 8,
+    "calibration_planned_steps_per_path": 3,
+    "numeric_calibration_steps_required": 21,
+    "sensitivity_records": 96,
+    "records_per_model_condition_controller": 1,
+    "new_abnormality_types": 0,
+    "random_draws": 0,
+    "random_seeds": [],
+    "random_confidence_intervals": false,
+    "factor_interactions_tested": false,
+    "physical_calibration_established": false
+  },
+  "fixed_wait": {
+    "value_s": null,
+    "value_status": "not_yet_computed_no_calibration_run",
+    "models_used": ["D0", "D1", "D2", "D3", "D4", "D5", "D6"],
+    "model_recorded_but_excluded_from_value": "D7",
+    "reference_elapsed_origin": "corresponding_step_simulated_Applied",
+    "formula": "ceil(10 * max(reference_first_s - simulated_Applied_s over all 21 numeric-model planned steps)) / 10",
+    "rounding_resolution_s": 0.1,
+    "one_value_for_all_three_steps_models_and_conditions": true,
+    "maximum_allowed_s": 10.0,
+    "stop_if_strictly_greater_than_maximum": true,
+    "equality_at_10_s_allowed_subject_to_timer_tie_test": true,
+    "stop_if_any_numeric_model_step_is_missing_unattempted_or_reference_incomplete": true,
+    "failed_samples_may_be_deleted_or_replaced": false,
+    "value_may_be_clipped_to_10_s": false,
+    "value_is_a_physical_safe_wait": false
+  },
+  "independent_reference": {
+    "radius_mm": 0.288,
+    "speed_mm_s": 0.192,
+    "dwell_s": 0.15,
+    "controller_may_read_truth_or_reference": false
+  },
+  "time_contract": {
+    "control_budget_candidate_s": 153.0,
+    "candidate_status": "requires_reachable_path_and_scheduler_audit_before_acceptance",
+    "budget_expression": "0.04 + 2 + 3 * (4 * 10 + 10 + 5 * 0.04)",
+    "unrounded_bound_s": 152.64,
+    "source_prepare_wait_s": 2.0,
+    "attempt_wait_s": 10.0,
+    "transport_attempt_windows_per_step": 4,
+    "recovery_wait_s": 10.0,
+    "reachable_Applied_transactions_per_step_in_bound": 5,
+    "configured_step_Applied_hard_limit_is_not_the_reachable_count": 7,
+    "followup_duration_s": null,
+    "followup_status": "must_be_predeclared_before_any_execution",
+    "actual_failure_time_equals_budget_by_definition": false,
+    "future_reference_may_backfill_complete_time_support": false
+  },
+  "separate_outcomes_required": [
+    "workflow_complete_s",
+    "per_step_independent_reference_intervals",
+    "sequential_reference_path",
+    "final_target_reference_first_s",
+    "final_reference_supported_at_complete",
+    "final_reference_supported_at_observation_end",
+    "completed_task_target",
+    "commanded_active_electrode",
+    "applied_active_electrode",
+    "actual_Update_request_reference_support",
+    "actual_Update_Applied_reference_support",
+    "Retry_Recovery_Resend_counts",
+    "actual_Complete_or_Stop_time",
+    "control_budget_s",
+    "Stop_reason_planned_attempted_unattempted_and_censored_steps"
+  ],
+  "execution_prerequisites_not_closed_by_this_freeze": [
+    "fixed_open_loop_teacher_schedule_and_step_observation_window",
+    "exact_passive_decay_equation_and_contact_reacquisition_semantics",
+    "153_s_candidate_path_audit_and_distinct_followup_duration",
+    "independent_implementation_regression_and_data_provenance_freeze",
+    "new_explicit_user_execution_request"
+  ],
+  "progression_guards": {
+    "block_sensitivity_if_calibration_fails": true,
+    "block_formal_random_performance_until_separate_review_and_authorization": true
+  },
+  "source_baseline_sha256": {
+    "dmf/chapter2_geometry_sim/exp2/spec.py": "8ad7418ba39735d6c2b65b28dc255d7cc07b98caf85434728257402cb6551099",
+    "dmf/chapter2_geometry_sim/exp2/world.py": "5a3b1d8e03514e8b023fe851ba597099cd0116a0d4122408af8afb1faf052e46",
+    "dmf/chapter2_geometry_sim/exp2/controller.py": "200791f2c1f507216ba79409eaee0c22ac1559d37216a5f1a1cc3116012d5821",
+    "dmf/chapter2_geometry_sim/exp2/reference.py": "8e186a64680e6a1edcce2667b953c0b60541ca01d29b145a29bbfccee7a0a9e8",
+    "dmf/chapter2_geometry_sim/exp2/runner.py": "16ea805befd59f31298beae8289a0bc2c15e0e9a0aa71346172ca52aaea9806e",
+    "dmf/chapter2_geometry_sim/exp2_faults/spec.py": "2058a5bb222749c723259ef40e1d37ccba4be80545324b65c1ae2a9e9e8df4e7",
+    "dmf/chapter2_geometry_sim/exp1b/spec.py": "85a21411af21611fbb1aa0e9d4fe514f6c6b765a830f9ff7a38c9df4cbb83a32",
+    "scripts/analyze_geometry_exp2_outcomes.py": "9b25827e8f3013aeac2f7741bfaf9952d9eae220c6dd9112550889e4c75bcbc4"
+  }
+}

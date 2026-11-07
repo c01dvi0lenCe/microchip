@@ -1,0 +1,12 @@
+{
+  "schema": "chapter2_geometry_exp1b_formal_v1",
+  "extends_development": "chapter2_geometry_exp1b_random_dev_v1.json",
+  "development_wrapper_sha256": "290c54e965dc5124355efae63e12fba8ac6f71ae6cf3afe89fee9ac4841a05b0",
+  "base_sha256": "93d0de69c1c64c6772c4a46c97f1991489d34232136877be10747a4f824f4b03",
+  "formal_seed_slots": {"266000":0,"266001":1,"266002":2,"266003":3,"266004":4,"266005":5,"266006":6,"266007":7,"266008":8,"266009":9,"266010":10,"266011":11,"266012":12,"266013":13,"266014":14,"266015":15,"266016":16,"266017":17,"266018":18,"266019":19},
+  "maximum_batches": 1,
+  "execution_requires_verified_freeze": true,
+  "statistics_version": "exp1b_formal_stratified_v1",
+  "latency_mixture_policy": "combined descriptive median only; inferential latency confined to base and individual low/high strata",
+  "scope": "One approved 20-seed paired batch only after verification freeze; no new model, thresholds, distribution or development seeds."
+}

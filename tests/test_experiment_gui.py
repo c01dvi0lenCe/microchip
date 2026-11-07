@@ -14,7 +14,8 @@ class ExperimentGuiTests(unittest.TestCase):
     def setUp(self):
         self.root = tk.Tk()
         self.root.withdraw()
-        self.app = STM32MatrixController(self.root)
+        # Legacy adapter regression remains opt-in; normal operator GUI hides it.
+        self.app = STM32MatrixController(self.root, research_ui=True)
         self.root.update_idletasks()
 
     def tearDown(self):

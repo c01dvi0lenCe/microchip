@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Optional
@@ -26,11 +27,23 @@ def evaluate_results(
     boundary_tolerance_px: int = 2,
     electrode_map_path: Path | None = None,
 ) -> dict[str, object]:
+    """Score every reference row using the legacy pixel-based frame-results schema.
+
+    The caller supplies the complete reviewed reference CSV. Experiment frames
+    contain mm centroids and require a separately implemented explicit adapter;
+    they are deliberately not inferred or converted here. Missing predictions,
+    blank masks and failed detections are empty segmentation predictions.
+    """
     if cv2 is None:
         raise RuntimeError("opencv-python is required for evaluation")
+    _validate_frame_schema(results_path, "prediction")
+    _validate_frame_schema(ground_truth_path, "reference")
     results = read_csv_rows(results_path)
     truth_rows = read_csv_rows(ground_truth_path)
-    truth_by_key = {(row["video_id"], int(row["frame_id"])): row for row in truth_rows}
+    results_by_key = _index_unique_rows(results, "prediction")
+    truth_by_key = _index_unique_rows(truth_rows, "reference")
+    for key in results_by_key.keys() - truth_by_key.keys():
+        _read_optional_mask(results_path.parent, results_by_key[key].get("mask_path", ""))
     electrode_map = load_electrode_map(electrode_map_path) if electrode_map_path is not None else None
     per_frame = []
     predicted_states = []
@@ -40,20 +53,32 @@ def evaluate_results(
     pipeline_times = []
     region_mask_cache = {}
     label_map_cache = {}
-    for row in results:
-        key = (row["video_id"], int(row["frame_id"]))
-        truth = truth_by_key.get(key)
-        if truth is None:
-            continue
+    missing_rows = blank_masks = failed_detections = empty_masks = 0
+    positive_gt_frames = positive_gt_misses = 0
+    for key, truth in truth_by_key.items():
+        prediction_missing = key not in results_by_key
+        row = results_by_key.get(key, {})
+        missing_rows += int(prediction_missing)
+        # Resolve nonempty paths even for a failed detection: missing files are
+        # broken artifacts, not legal empty predictions.
         predicted_mask = _read_optional_mask(results_path.parent, row.get("mask_path", ""))
         truth_mask = _read_required_mask(ground_truth_path.parent, truth["mask_path"])
+        detected_flag = str(row.get("detected", "")).lower() in {"true", "1", "yes"}
+        blank_masks += int(not prediction_missing and not str(row.get("mask_path", "")).strip())
+        failed_detections += int(not prediction_missing and not detected_flag)
+        empty_masks += int(predicted_mask is not None and not predicted_mask.any())
+        if predicted_mask is None or not detected_flag:
+            predicted_mask = np.zeros_like(truth_mask)
+        detected = detected_flag and bool(predicted_mask.any())
         mask_scores = segmentation_metrics(predicted_mask, truth_mask, boundary_tolerance_px)
-        predicted_centroid = _row_centroid(row)
+        predicted_centroid = _row_centroid(row) if detected else None
         expected_centroid = mask_centroid(truth_mask)
         error_px = centroid_error(predicted_centroid, expected_centroid)
-        detected = str(row.get("detected", "")).lower() in {"true", "1", "yes"}
         if not detected:
             misses += 1
+        if truth_mask.any():
+            positive_gt_frames += 1
+            positive_gt_misses += int(not detected)
         processing_ms = _optional_float(row.get("processing_time_ms"))
         if processing_ms is not None:
             processing_times.append(processing_ms)
@@ -69,6 +94,8 @@ def evaluate_results(
             "processing_time_ms": processing_ms,
             "pipeline_time_ms": pipeline_ms,
             "state_gt": truth.get("state_gt", DropletState.UNKNOWN.value),
+            "state_pred": row.get("state_pred") or DropletState.UNKNOWN.value,
+            "prediction_missing": prediction_missing,
         }
         if electrode_map is not None:
             source = int(truth["source_electrode"])
@@ -97,9 +124,8 @@ def evaluate_results(
                 }
             )
         per_frame.append(metric_row)
-        if DropletState.parse(row.get("state_pred")) is not DropletState.UNKNOWN:
-            predicted_states.append(row["state_pred"])
-            truth_states.append(truth.get("state_gt", DropletState.UNKNOWN.value))
+        predicted_states.append(row.get("state_pred") or DropletState.UNKNOWN.value)
+        truth_states.append(truth.get("state_gt", DropletState.UNKNOWN.value))
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_csv_rows(output_dir / "per_frame_metrics.csv", per_frame)
@@ -107,6 +133,23 @@ def evaluate_results(
     mean_pipeline = mean_available(pipeline_times)
     summary: dict[str, object] = {
         "matched_frames": len(per_frame),
+        "reference_frames": len(truth_rows),
+        "prediction_rows": len(results),
+        "prediction_rows_matched": len(results_by_key.keys() & truth_by_key.keys()),
+        "unmatched_prediction_rows": len(results_by_key.keys() - truth_by_key.keys()),
+        "missing_prediction_rows": missing_rows,
+        "blank_prediction_masks": blank_masks,
+        "detected_false_rows": failed_detections,
+        "empty_prediction_masks": empty_masks,
+        "detection_misses": misses,
+        "segmentation_denominator": len(per_frame),
+        "positive_gt_frames": positive_gt_frames,
+        "positive_gt_detection_misses": positive_gt_misses,
+        "positive_gt_miss_rate": positive_gt_misses / positive_gt_frames if positive_gt_frames else None,
+        "unknown_prediction_count": sum(DropletState.parse(value) is DropletState.UNKNOWN for value in predicted_states),
+        "centroid_error_denominator": sum(row["centroid_error_px"] is not None for row in per_frame),
+        "processing_time_denominator": len(processing_times),
+        "pipeline_time_denominator": len(pipeline_times),
         "miss_rate": misses / len(per_frame) if per_frame else None,
         "mean_iou": mean_available(row["iou"] for row in per_frame),
         "mean_dice": mean_available(row["dice"] for row in per_frame),
@@ -119,8 +162,7 @@ def evaluate_results(
         "mean_pipeline_time_ms": mean_pipeline,
         "pipeline_fps": 1000.0 / mean_pipeline if mean_pipeline and mean_pipeline > 0 else None,
     }
-    if predicted_states:
-        summary["state_metrics"] = state_classification_metrics(predicted_states, truth_states)
+    summary["state_metrics"] = state_classification_metrics(predicted_states, truth_states)
     if electrode_map is not None:
         summary["dmf_metrics"] = {
             "overall": _summarize_dmf(per_frame),
@@ -138,8 +180,31 @@ def evaluate_results(
     return summary
 
 
+def _validate_frame_schema(path, label):
+    with path.open("r", newline="", encoding="utf-8-sig") as handle:
+        columns = set(csv.DictReader(handle).fieldnames or [])
+    _validate_frame_columns(columns, label)
+
+
+def _validate_frame_columns(columns, label):
+    if {"recognized_state", "centroid_x", "centroid_y", "event_action"} & columns:
+        raise ValueError("experiment frames schema requires an explicit mm-to-pixel/frame-results adapter")
+    if not {"video_id", "frame_id"}.issubset(columns):
+        raise ValueError(f"{label} must use frame-results video_id/frame_id schema; use an explicit adapter")
+
+
+def _index_unique_rows(rows, label):
+    indexed = {}
+    for row in rows:
+        key = (row["video_id"], int(row["frame_id"]))
+        if key in indexed:
+            raise ValueError(f"duplicate {label} video/frame key: {key}")
+        indexed[key] = row
+    return indexed
+
+
 def _read_optional_mask(base_dir: Path, value: str):
-    if not value:
+    if not value or not str(value).strip():
         return None
     path = Path(value)
     path = path if path.is_absolute() else base_dir / path

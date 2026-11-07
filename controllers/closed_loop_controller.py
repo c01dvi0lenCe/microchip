@@ -133,6 +133,9 @@ class ClosedLoopControllerMixin:
         self._begin_current_step()
 
     def _auto_loop(self):
+        if self._operator_only:
+            self.auto_running=False
+            return
         if not self.auto_running:
             return
 
@@ -664,6 +667,12 @@ class ClosedLoopControllerMixin:
         self._draw_matrix_canvas()
 
     def _set_auto_active_cells(self, cells, stage="ELECTRODE_SWITCH", action="switch"):
+        if self._operator_only:
+            self.log('视觉闭环未验收，旧自动电极切换入口已禁用')
+            return False
+        if getattr(self, '_timed_mix_owned', False):
+            self.log('定时四宫格占用电极，其他自动切换已忽略')
+            return False
         old_cells = set(self.active_auto_cells)
         new_cells = set(cells)
         off_cells = old_cells - new_cells

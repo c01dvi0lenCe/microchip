@@ -1,0 +1,18 @@
+mode: simulation
+simulation:
+  route: [190, 191, 192, 172]
+  map_path: null
+  max_time_s: 24.0
+# Frozen before the first smoke run. No physical unit/calibration claim.
+study:
+  smoke_seeds: [260600, 260601, 260602]
+  formal_seed_start: 261000
+  formal_seed_count: 20
+  scenarios: [normal, delayed, partial_stall, jitter, dropout, deviation, failure]
+  methods: [A, B, C, C_no_spatial, C_no_temporal, C_no_validity]
+  offline_variants: [S1, S2, S3, S4, no_spatial, no_temporal, no_validity]
+  teacher_step_duration_s: 4.0
+  sensitivity_scenario: jitter
+  arrival_coverages: [0.75, 0.85, 0.95]
+  stable_durations_s: [0.25, 0.4, 0.6]
+  bootstrap_repeats: 2000

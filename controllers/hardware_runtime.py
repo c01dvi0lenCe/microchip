@@ -18,6 +18,13 @@ from dmf.recording import clock_stamp
 
 class HardwareRuntimeMixin:
     def _update_mode_ui(self):
+        if self._operator_only:
+            self.root.title('数字微流控上位机 · 真实实验操控')
+            self.port_combobox.config(state='readonly')
+            self.btn_refresh.config(state='normal');self.btn_connect.config(state='normal')
+            self._set_connection_state(self.is_connected,self.port_combobox.get())
+            if not self.camera_running:self.camera_label.config(image='',text=self._camera_idle_text())
+            return
         self.root.title(f"数字微流控视觉平台 - {self.rows}x{self.cols} {self.mode_var.get()}上位机")
         if self.is_simulation_mode():
             self.port_combobox.config(state="disabled")
@@ -86,6 +93,10 @@ class HardwareRuntimeMixin:
             self.log("未检测到可用串口")
 
     def toggle_connection(self):
+        if getattr(self, '_timed_mix_owned', False):
+            self._timed_mix_disconnect_requested = True
+            self.stop_timed_mixing()
+            return
         if self._experiment_active:
             return
         if self.is_simulation_mode():
@@ -113,11 +124,14 @@ class HardwareRuntimeMixin:
                     return
                 self.hardware_state_uncertain = False
                 self.hardware_auto_owned = False
+                self._open_loop_release_required = False
                 self._clear_local_electrode_display()
                 self.log(f"成功连接到 {port}，STM32 已确认 ALL_OFF，会话序列已同步")
             except Exception as exc:
                 messagebox.showerror("错误", str(exc))
         else:
+            if not self._release_open_loop_hardware():
+                return
             if self.ser:
                 self.ser.close()
             self._set_connection_state(False)
@@ -149,6 +163,9 @@ class HardwareRuntimeMixin:
         return False
 
     def _send_transaction_line(self, command):
+        import threading
+        if threading.current_thread() is getattr(self, '_timed_mix_worker', None):
+            return self._timed_mix_send_line(command)
         return self.send_command(command, log_send=False)
 
     def _submit_auto_electrode_changes(self, changes):
@@ -170,6 +187,8 @@ class HardwareRuntimeMixin:
         if emergency_off:
             self.hardware_state_uncertain = False
             self.hardware_auto_owned = False
+
+            self._open_loop_release_required = False
             self._clear_local_electrode_display()
             status = "闭环: 通信失败，已安全全关"
         else:
@@ -189,6 +208,8 @@ class HardwareRuntimeMixin:
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
             return
+        if self._shared_open_loop_manual():
+            return self._apply_manual_electrode_changes({eid: 1-self.buttons[eid]['state']})
         if self._hardware_manual_control_blocked():
             return
         current_state = self.buttons[eid]["state"]
@@ -215,6 +236,9 @@ class HardwareRuntimeMixin:
         active_ids = self._active_electrode_ids()
         current_state = self.buttons[eid]["state"]
 
+        if self._shared_open_loop_manual():
+            return self._apply_manual_electrode_changes({eid: 0 if current_state else 1})
+
         if additive:
             self._apply_manual_electrode_changes({eid: 0 if current_state else 1})
             return
@@ -234,6 +258,9 @@ class HardwareRuntimeMixin:
 
 
     def _hardware_manual_control_blocked(self):
+        if getattr(self, '_timed_mix_owned', False):
+            self.log('定时四宫格占用电极，手动操作已忽略')
+            return True
         if self._experiment_active:
             self.log("第二章实验运行中，手动电极控制已锁定")
             return True
@@ -268,6 +295,10 @@ class HardwareRuntimeMixin:
         return True
 
     def reset_all(self):
+        if getattr(self, '_timed_mix_owned', False):
+            self._timed_mix_release_requested = True
+            self.stop_timed_mixing()
+            return
         if self._experiment_active:
             self.stop_experiment()
             return
@@ -284,6 +315,7 @@ class HardwareRuntimeMixin:
                 return
             self.hardware_state_uncertain = False
             self.hardware_auto_owned = False
+            self._open_loop_release_required = False
 
         self._clear_local_electrode_display()
 
@@ -318,6 +350,9 @@ class HardwareRuntimeMixin:
                                 if line.startswith("ERR:"):
                                     self.root.after(0, self.log, f"STM32 协议错误 <- {line}")
                             elif line.startswith("SYNC:"):
+                                # Capture before invalidation: Tk may finish the
+                                # session concurrently after observing unknown.
+                                shared_open_loop = self._shared_open_loop_manual()
                                 if hasattr(self, 'electrode_event_stream'):
                                     self.electrode_event_stream.emit(dict(event='state_unknown',
                                         **clock_stamp(), line=line, error='external state sync requires resynchronization'))
@@ -326,7 +361,10 @@ class HardwareRuntimeMixin:
                                     try:
                                         p_id = int(parts[1])
                                         p_state = int(parts[2])
-                                        self.root.after(0, self.update_ui_only, p_id, p_state)
+                                        if shared_open_loop:
+                                            self.root.after(0, self.log, '开环收到外部SYNC：状态未知，保留最后APPLIED显示并停止后续请求')
+                                        else:
+                                            self.root.after(0, self.update_ui_only, p_id, p_state)
                                     except ValueError:
                                         self.root.after(0, self.log, f"同步数据格式错误: {line}")
                             else:
@@ -359,6 +397,16 @@ class HardwareRuntimeMixin:
         self.log(f"修正反馈[{action}] {msg}")
 
     def on_close(self):
+        if getattr(self, '_timed_mix_owned', False):
+            self._timed_mix_release_requested = True
+            self.stop_timed_mixing()
+            if self._timed_mix_owned:
+                self.root.after(50, self.on_close)
+                return
+        if self._open_loop_release_required:
+            was_connected = self.is_connected
+            if not self._release_open_loop_hardware() and was_connected:
+                return
         if self._experiment_active:
             self._experiment_closing = True
             self.stop_experiment()
@@ -396,6 +444,8 @@ class HardwareRuntimeMixin:
         self.root.destroy()
 
     def _apply_manual_electrode_changes(self, changes, log_send=True):
+        if self._shared_open_loop_manual():
+            return self._queue_open_loop_manual(changes)
         effective_changes = {
             int(eid): 1 if state else 0
             for eid, state in changes.items()

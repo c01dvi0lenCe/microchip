@@ -31,10 +31,11 @@ class SerialTransport:
         import serial
         cfg=config['serial'];self.config=cfg;self.closed=False;self.deadline=None;self.error=''
         self.last_command_sent=False;self.releasing=False
+        self._observer=config.get('_transaction_observer')
         self.emergency=config.get('_emergency',lambda:False)
         self.port=serial.Serial(cfg['port'],cfg['baudrate'],timeout=.05,write_timeout=cfg['ack_timeout_s'])
         self.client=DeadlineTransactionClient(self._send,ack_timeout_s=cfg['ack_timeout_s'],max_retries=cfg['max_retries'],
-            event_observer=config.get('_transaction_observer'),
+            event_observer=self._observe_transaction,
             deadline_provider=lambda:self.deadline or float('inf'),
             cancelled=lambda:not self.releasing and (self.emergency() or bool(self.error)))
         self.reader=threading.Thread(target=self._read,daemon=True);self.reader.start()
@@ -64,9 +65,24 @@ class SerialTransport:
 
     def apply(self,changes):
         self.last_command_sent=False;self.releasing=False
+        self.last_applied_monotonic_ns=None;self.last_applied_perf_counter_ns=None
+        self.last_request_id='';self.last_requested_perf_counter_ns=None;self.last_communication_retries=0
         self.deadline=time.monotonic()+self.config['command_timeout_s']
         r=self.client.apply_changes(changes)
+        self.last_communication_retries=max(0,r.attempts-1)
+        if not r.applied:
+            self.last_applied_monotonic_ns=None;self.last_applied_perf_counter_ns=None
         return r.sequence,r.applied,r.error or self.error
+
+    def _observe_transaction(self,event):
+        if event['event']=='transaction_requested':
+            self.last_request_id=event['request_id']
+            self.last_requested_perf_counter_ns=event['host_perf_counter_ns']
+        elif event['event']=='applied' and event['request_id']==getattr(self,'last_request_id',None):
+            # The reused client emits the matched ACK's receive stamp, not now().
+            self.last_applied_monotonic_ns=event['host_monotonic_ns']
+            self.last_applied_perf_counter_ns=event['host_perf_counter_ns']
+        if self._observer is not None:self._observer(event)
 
     def release(self):
         self.last_command_sent=False;self.releasing=True
@@ -86,6 +102,12 @@ class CommandResult:
     accepted: bool = True
     error: str = ''
     changes: dict | None = None
+    request_id: str = ''
+    applied_monotonic_ns: int | None = None
+    applied_perf_counter_ns: int | None = None
+    requested_perf_counter_ns: int | None = None
+    communication_retries: int = 0
+    simulated: bool = False
 
 
 class AMActuator:
@@ -96,7 +118,7 @@ class AMActuator:
         self.transport=transport_factory(config) if mode=='experiment' else None
 
     def execute(self,decision):
-        if decision.target is None:return CommandResult()
+        if decision.target is None:return CommandResult(simulated=self.mode!='experiment')
         target=decision.target
         if type(target) is not int or not 1<=target<=400:raise ValueError('invalid core target')
         changes={target:1}
@@ -105,11 +127,19 @@ class AMActuator:
         if self.transport:cid,accepted,error=self.transport.apply(changes)
         if accepted:self.active=target
         sent=bool(getattr(self.transport,'last_command_sent',True)) if self.transport else False
-        return CommandResult(cid,sent,accepted,error,changes)
+        def stamp(name):
+            value=getattr(self.transport,name,None) if self.transport else None
+            return value if type(value) is int else None
+        request=getattr(self.transport,'last_request_id','') if self.transport else ''
+        return CommandResult(cid,sent,accepted,error,changes,
+            request if isinstance(request,str) else '',
+            stamp('last_applied_monotonic_ns') if accepted else None,
+            stamp('last_applied_perf_counter_ns') if accepted else None,
+            stamp('last_requested_perf_counter_ns'),stamp('last_communication_retries') or 0,self.transport is None)
 
     def close(self):
         if self.transport:
             try:ok=self.transport.release()
             finally:self.transport.close()
             return CommandResult('ALL_OFF',bool(getattr(self.transport,'last_command_sent',True)),bool(ok),'' if ok else 'ALL_OFF acknowledgement failed',{})
-        return CommandResult('ALL_OFF',False,True,'',{})
+        return CommandResult('ALL_OFF',False,True,'',{},simulated=True)

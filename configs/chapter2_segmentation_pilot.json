@@ -1,0 +1,17 @@
+{
+  "data_kind": "real_video",
+  "hardware_label": "Intel Core Ultra 9 275HX; CPU only; NVIDIA GPU unused",
+  "warmup": 5,
+  "repeats": 10,
+  "opencv_threads": 1,
+  "parameters": {
+    "blur_kernel": 5,
+    "morphology_kernel": 3,
+    "open_iterations": 1,
+    "close_iterations": 2,
+    "min_area_px": 40.0,
+    "reject_border_components": true,
+    "adaptive_block": 51,
+    "adaptive_c": 5.0
+  }
+}

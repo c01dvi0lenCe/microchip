@@ -1,0 +1,302 @@
+{
+  "git_head": "fe9699d7e6867ee8897056b122c8248153cadd3e",
+  "kind": "pre_formal_simulation_dirty_workspace_source_baseline",
+  "files": [
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\main.py",
+      "Hash": "8C960C4DFC5DFAC56F14F165D8596C51E0393E6A17BFB901C7FEAAD03270A955"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\app_controller.py",
+      "Hash": "856CEBEE7835606A11D6A895334E6A8F7D6B6018807342FCD96069F40403C380"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\__init__.py",
+      "Hash": "22203A45C7C0A4CBB1A5790A6CC65A54ECF716722F20ED1758AEF0EEEBAD3984"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\arrival_confirmation.py",
+      "Hash": "0832C87AA2B85FF0ABF205B83CC3953287AEEA395AFE56F42812B1344AEA11DF"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\camera_controller.py",
+      "Hash": "24897DC729F012167DDE669AA7154B4053E6F5B4373EF7DDD391A1BDC515FB71"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\canvas_controller.py",
+      "Hash": "5C6AA18ECD2C7542369954EEF9FB5E5D4387F6604C0583FD3EA405C02BBA68F7"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\closed_loop_controller.py",
+      "Hash": "7DC519D9C9B1B2F821D3320D7BE6A443223146CB6FFAF10AEA29C7FFC6C80E98"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\common.py",
+      "Hash": "4FBDBD605197BAC0E0E9AB1B31D592D702E746056709E375EBD3B5AC3954CF5E"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\electrode_transaction.py",
+      "Hash": "8F02F634E6563B88B040187F0A1D90FDA8F0CDDFE2715A3163C5CBCE76C6186B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\experiment_controller.py",
+      "Hash": "8C44431276741993A6B15D0CB368E986A2E02A43D58135EABC1A66C311F850F0"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\experiment_session.py",
+      "Hash": "DED39EAA4EC94E08A2D4C1DBCD85AF967D75DA76F340E594B89C5C4B9F91D2A6"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\hardware_controller.py",
+      "Hash": "5BE1620B702C6A60CDEFEBE050A0DBCDD937E6A3ABE8565CC6A1C3C804A4B712"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\hardware_runtime.py",
+      "Hash": "3602D45DF4DCD1C6C39FE3D08C4FC82F38274E12B657AEB7BADEDEAD7C0D41F3"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\multi_runtime.py",
+      "Hash": "2A5FDB731922612E210CD1D04F109EFAD4D404613605AFF9CFE0C3BD6CAE9F7B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\operation_planning.py",
+      "Hash": "14470596586C9A05723999EDE785CAED800E388688F88F6B60B0002B1D433C47"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\persistence_controller.py",
+      "Hash": "50682830FB3844141BED4AD9004F6AC76CC1B2D79AAE267E40572BEB1184E2BF"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\planning_job.py",
+      "Hash": "DB80AA2BF5DC8A865180515D56B130CC948EB59412476C7A0B670AD997A8644D"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\simulation_controller.py",
+      "Hash": "1F51F0D057BCB706DBF878DD29C255B86EF38CB173371A0C92B20EFDF22BDE4B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\task_control.py",
+      "Hash": "60F27463D9D26719C386FAC93953CBE9E5A3BD2A862C5355FEA47303DE4672CE"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\controllers\\ui_controller.py",
+      "Hash": "FB9E7476D0D04BB9BE8005FCD3E47B88929AB53C2889205801A9E5BE5FB69A1F"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\planning\\__init__.py",
+      "Hash": "BF73796D819674B8DB65B8F0442478D21404DAD7B0A5B338247DA4C6BCAA6589"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\planning\\assignment.py",
+      "Hash": "2EF7397A21E3CB4531E7DE09049F41FC5B3C04C0BF2F179A9BB1AA9D10C01EC8"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\planning\\astar.py",
+      "Hash": "F6E15F39A53874AC329F6A9E343E4341376BFD754CADA0CE05BD10A9681AE434"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\planning\\geometry.py",
+      "Hash": "4FF8C8B12340A9397A8EC10E3FEE7AB8BDFE7EEAF31F823F2F2B5D67652FC488"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\planning\\scheduler.py",
+      "Hash": "BF0B3959B98504CB3157A02D8161FBF6D9830214C42F1B67B87FC4676A94A9BC"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\__init__.py",
+      "Hash": "82321E6623341FF2F2D9DF52E627AE36FE0E60D814271856DA7A1D2DD1FB1D40"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\batch.py",
+      "Hash": "0284A0ED0702882B78D10A1A89C2198B80C28B1D2C281664329B5C18541B7235"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\config.py",
+      "Hash": "880538BD09DC01D187B41136E9078A986CF9E0C9B39888F53CA44CAEDE786033"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\control.py",
+      "Hash": "BCB71C32A2107ECA95CF37373DF68DD8B79079A999471F13DED052DFDBE385F8"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\geometry.py",
+      "Hash": "3A5B4FD48C86C223DC85E920725DF9C6DA5C0C661589FA76BD468FDC76933A76"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\plotting.py",
+      "Hash": "0653CC9FF1A4E9E69B5D69BA421CA0F24CCAA2B816493004F1433621B901EEDC"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\runner.py",
+      "Hash": "0573B74FE33672DA7FB8294FC52902474B1361B8066DE07DD95C77682CB4D696"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\vision.py",
+      "Hash": "97AFDF8E75E295DA03A9DE63E07E7EE2E7598C8DD2D4829547CB1B4802DDC557"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\chapter2_sim\\world.py",
+      "Hash": "B915A957DD8A61701FDA89DC68BEBA1387F285011D903C8610565C89F2B9FE0E"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\__init__.py",
+      "Hash": "CBC36C79C867F6FC6747BD04AF6DF109B96C2D4AB8818AD4A832BAA974BD62A8"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\actuator.py",
+      "Hash": "EDCED2C6D286B37A16AD21DA10782A4924B50504DD75C13B67E64669EC0AA1DF"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\config.py",
+      "Hash": "58CD44ABD17ACFB27F5475D37FF37BF0A106CCAA3A026C8BA0AD0F2A95A3FE8E"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\evidence.py",
+      "Hash": "18362A35D6BEE0FA1732AAF40032EFE1694CD2F5372D34368AB0C734569AB321"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\logging.py",
+      "Hash": "E10790E93DFD1B570B64C7B57D816EA0492A4BD27403B97E0FA720144DDD12CC"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\mvs_camera.py",
+      "Hash": "5C0CF9E4851A92CB87EDBF2E2912437FDD3B601B88564E265B11DAD05E5EC00B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\overlay.py",
+      "Hash": "060BA7EF79AD813EA2E3F9C51FF506FA524732F3D0AF61FB14F0E468CCDEA830"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\perception.py",
+      "Hash": "411074282398E12B694295736475069B6A9FEE4FD82D422A9E09831AA371A5A1"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\policy.py",
+      "Hash": "8F4FCFFDF11D983399647866F442CCE5FB39CABEEBFF36D7889DD274435D673B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\runner.py",
+      "Hash": "7001F219BE9E401218849C02BC8F8BF87A03C599BF874EDDA296B65E476FBA1B"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\segmenter.py",
+      "Hash": "5890F355D242EDC1D89E5161C1037CF9FEC2D36A8A1D2F9FF676A7A4BD1E10AB"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\experiment\\sources.py",
+      "Hash": "26A83C432D01DCA9A696CA0DEFD134BCB1A7B1AC427C4C87EF0483C7F64A138C"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\__init__.py",
+      "Hash": "C1C414BFD42422A75487E47743B9FB0BF772DBB3013C412293BE2FD39E1DE205"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\__main__.py",
+      "Hash": "B2557CCF866C981FD65BC19B07E7280CC6963A4EE9558BBC1A08FA3CBE5E6158"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\calibration.py",
+      "Hash": "C2F679CDBCFA05130DFCD1FF9D4DF38B7606BC78F06F1411B07D50F854529EF8"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\cli.py",
+      "Hash": "0C609DB0F206AF60B110BBA24DDF47AA2901EC0E3EA4FBEBF19E4A860B1818A7"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\config.py",
+      "Hash": "FE2DAB30E05A2DFA9E2E5C91A389DEFC9DEFD50B3B169B6AE4E1B1E43E50E84D"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\constraints.py",
+      "Hash": "B190BD13B8486378D2DADC196BE5F61FADFF8F09C3EB73F05C4FE90B8A928364"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\contracts.py",
+      "Hash": "138A6B1EE21D1E14CDFEDF1F7EBAFEBE6523EC162F6E857DEA8D145A81682AA5"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\dataset.py",
+      "Hash": "D1A6C98B49E312DEF0EAF1E84042CF25056911D6AA803EC23AA6BDE81AFE17E7"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\electrode_map.py",
+      "Hash": "9122217A84659744E90A6A44665326255D28A4C8BBC51DE6EFBF434A46F31FBD"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\evaluation.py",
+      "Hash": "8007B06D7E99119F19F7B5AB5C30875DE3FB9C73D2C5F47715BEE82A1B8399F0"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\event_evaluation.py",
+      "Hash": "13E6B402AB36D10E807EEAB320B142940E63C810CD6CBB229038CBF3DA4B2063"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\features.py",
+      "Hash": "72345FE3B2AB620B8A982C08C2EA68BD041C029122199E082AA680A1992AE5C1"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\image_io.py",
+      "Hash": "DA1097E15F1BBF37321FCF0F6F5E27D47BF7838A3E2A8A457F6652B4E4FEFA42"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\metrics.py",
+      "Hash": "6A256ADF7455E90A38DBFFA12A2A2A1BCDCBEAA9B2CEB775E55B78DEDE7C4E02"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\overlay.py",
+      "Hash": "53DCFA39AB9A75ECB2D6F66A4BA08A947E1BE27AB6B9FDFC5B19912508202996"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\pilot_annotation_gui.py",
+      "Hash": "85111675C396900FF31A16A1F9D134B613D0B9F26D309B8F5CED071A89E12336"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\pilot_annotation.py",
+      "Hash": "5E90972EE531053AFDC42167383D7E3552FC1C4753196D2D8902EBA251477953"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\pipeline.py",
+      "Hash": "C5AA59360702DA296848B2361D30F1E2A7291F6A7AE4D7B325DBC477ED90450D"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\simulation.py",
+      "Hash": "428F4BF8AF0B076825B21ECD5E3F3EEF9DDB53AD8022E3CB1E233DC2876EB846"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\timebase.py",
+      "Hash": "3BA8255862D6275423221E4F18FD510AAAC8C3CF755F68FF2ABE638D6C82EDF1"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\timeseries.py",
+      "Hash": "0AFD954FDADFEEC33AB8596AF8D12A30D28045EB72F14240B6252260186D3910"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\algorithms\\__init__.py",
+      "Hash": "B3D272C8BCD04E1BB8F430CB1D787512C90CE9742C831ED4360FAE730ED5733C"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\algorithms\\background.py",
+      "Hash": "4E3FD385B51469B485ACBA3B7571DD2D9EC6BEABE2E8C69D29E53490C2D8B4DC"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\algorithms\\common.py",
+      "Hash": "E207E97F3F96378DEEE33666C6183F7373AE875919F6BA46B2AB17E17C8C6373"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\algorithms\\registry.py",
+      "Hash": "B238B36AFC95BB34174D94D036FD24EF51A94AF3755DC96236D1FFE3C2C77EC8"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\dmf\\vision\\algorithms\\threshold.py",
+      "Hash": "E441324E52F4E80BE10B1206DE5CF28A4ADF6F27D108D8B681B878A882ED5F38"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\configs\\chapter2_simulation.yaml",
+      "Hash": "3F220FD260921CF3712ABC4ED48A7112A0FBB64B0648144A0550F15A8A9E7580"
+    },
+    {
+      "Path": "D:\\Learn\\ZJU\\有源矩阵\\上位机\\run_chapter2_simulation.py",
+      "Hash": "E2ECC6095F823196E3A40872FEF9C63766450FB254FFF0807968B700F371AD92"
+    }
+  ]
+}

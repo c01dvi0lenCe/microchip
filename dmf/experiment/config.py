@@ -22,6 +22,10 @@ class StateConfig:
     min_area_px: float = 10.
     max_area_px: float = 100000.
     min_confidence: float = .2
+    evidence_max_gap_s: float = .25
+    arrival_max_centroid_span_mm: float = .5
+    arrival_max_coverage_span: float = .15
+    deviation_frames: int = 2
 
 
 @dataclass(frozen=True)
@@ -34,9 +38,11 @@ class ControlConfig:
     source_timeout_s: float = 10.
     source_frames: int = 5
     source_duration_s: float = .25
+    attempt_timeout_s: float = 16.
+    progress_epsilon_mm: float = .1
 
 
-def typed_config(cls, values):
+def typed_config(cls, values, *, allow_test_thresholds=False):
     cfg=cls(**values)
     for field in fields(cfg):
         value=getattr(cfg,field.name)
@@ -51,9 +57,17 @@ def typed_config(cls, values):
             raise ValueError('positive state frame counts, history gap and max speed required')
         if cfg.max_area_px<=cfg.min_area_px or not 0<=cfg.min_confidence<=1:
             raise ValueError('invalid mask area/confidence limits')
+        if cfg.evidence_max_gap_s<=0 or cfg.deviation_frames<2 or cfg.arrival_max_coverage_span>1:
+            raise ValueError('positive evidence gap, >=2 deviation frames and coverage span <=1 required')
+        if not allow_test_thresholds and (cfg.arrival_frames<5 or cfg.arrival_duration_s<.25):
+            raise ValueError('formal arrival requires >=5 frames spanning >=0.25s')
     if cls is ControlConfig:
         if min(cfg.wait_s,cfg.recovery_timeout_s,cfg.no_detection_timeout_s,cfg.source_timeout_s)<=0 or cfg.source_frames<1:
             raise ValueError('control timeouts and source_frames must be positive')
+        if cfg.attempt_timeout_s<=0 or cfg.progress_epsilon_mm<=0:
+            raise ValueError('attempt timeout and progress epsilon must be positive')
+        if not allow_test_thresholds and (cfg.source_frames<5 or cfg.source_duration_s<.25):
+            raise ValueError('formal source confirmation requires >=5 frames spanning >=0.25s')
     return cfg
 
 
@@ -61,8 +75,9 @@ def load_config(path,mode=None):
     path=Path(path).resolve();c=load_yaml(path)
     c['mode']=mode or c.get('mode','offline')
     if c['mode'] not in {'offline','dry_run','experiment'}:raise ValueError('invalid MODE')
-    c['state']=asdict(typed_config(StateConfig,c.get('state',{})))
-    c['control']=asdict(typed_config(ControlConfig,c.get('control',{})))
+    test_thresholds=c.get('synthetic_test_only') is True and c['mode']!='experiment'
+    c['state']=asdict(typed_config(StateConfig,c.get('state',{}),allow_test_thresholds=test_thresholds))
+    c['control']=asdict(typed_config(ControlConfig,c.get('control',{}),allow_test_thresholds=test_thresholds))
     route=c.get('route',[])
     if len(route)<2 or any(type(x) is not int or not 1<=x<=400 for x in route):
         raise ValueError('Chapter 2 route requires at least two core electrodes (IDs 1..400)')

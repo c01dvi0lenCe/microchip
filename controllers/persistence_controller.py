@@ -42,6 +42,9 @@ class PersistenceControllerMixin:
         return True
 
     def load_settings_preset(self, path=None):
+        if self._operator_only:
+            self.log('旧仿真设置不导入真实操控入口，请在手动电极页设置任务')
+            return False
         if self.auto_running:
             self.log("闭环运行中，无法导入设置；请先暂停或停止")
             return False

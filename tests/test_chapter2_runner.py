@@ -145,7 +145,8 @@ class RunnerTests(unittest.TestCase):
                         time.sleep(.001)
                     t=time.monotonic()
                     yield frame(215,160,1,t)
-                    yield frame(190,190,2,captured_before_recovery_apply[0])
+                    yield frame(215,160,2,t+.001)
+                    yield frame(190,190,3,captured_before_recovery_apply[0])
                 def close(self):pass
             from dmf.experiment.actuator import AMActuator
             class Actuator(AMActuator):
@@ -160,9 +161,10 @@ class RunnerTests(unittest.TestCase):
                 segmenter_factory=lambda c:ThresholdSegmenter(ThresholdConfig(color_space='gray',lower=(0,),upper=(100,))),
                 actuator_factory=Actuator)
             rows=read_rows(root/'results/frames.csv')
-            self.assertEqual(rows[1]['event_action'],'Recovery',rows[1])
-            self.assertEqual(rows[2]['event_action'],'Hold',rows[2])
-            self.assertEqual(rows[2]['error'],'PRE_ACTUATION_FRAME',rows[2])
+            self.assertEqual(rows[1]['event_action'],'Hold',rows[1])
+            self.assertEqual(rows[2]['event_action'],'Recovery',rows[2])
+            self.assertEqual(rows[3]['event_action'],'Hold',rows[3])
+            self.assertEqual(rows[3]['error'],'PRE_ACTUATION_FRAME',rows[3])
 
     def test_visual_step_success_survives_next_target_command_failure(self):
         with tempfile.TemporaryDirectory() as td:

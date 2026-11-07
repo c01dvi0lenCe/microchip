@@ -29,10 +29,18 @@ from controllers.electrode_transaction import ElectrodeTransactionClient
 from controllers.task_control import TaskControlMixin
 from controllers.planning_job import PlanningJobRunner
 from controllers.experiment_controller import ExperimentControllerMixin
+from controllers.timed_mixing_controller import TimedMixingControllerMixin
+from controllers.open_loop_controller import OpenLoopControllerMixin
+from controllers.operator_profile import OperatorProfileMixin
+from controllers.open_loop_manual_controller import OpenLoopManualControllerMixin
 from dmf.recording import ElectrodeEventStream
 
 
 class STM32MatrixController(
+    OpenLoopManualControllerMixin,
+    OperatorProfileMixin,
+    OpenLoopControllerMixin,
+    TimedMixingControllerMixin,
     ExperimentControllerMixin,
     UiControllerMixin,
     SimulationControllerMixin,
@@ -76,8 +84,12 @@ class STM32MatrixController(
     MANUAL_TOOL_TOGGLE = "开关电极"
     MANUAL_TOOL_DROPLET = "设置液滴"
 
-    def __init__(self, root):
+    def __init__(self, root, *, research_ui=False, operator_only=False, simulation_only=False):
         self.root = root
+        if operator_only and simulation_only:raise ValueError('operator and simulation profiles are exclusive')
+        self._operator_only = bool(operator_only)
+        self._simulation_only = bool(simulation_only)
+        self._research_ui_enabled = bool(research_ui) and not self._operator_only and not self._simulation_only
         self.rows = GRID_ROWS
         self.cols = GRID_COLS
         self.pitch_mm = ELECTRODE_PITCH_MM
@@ -111,7 +123,9 @@ class STM32MatrixController(
         self.planning_poll_after_id = None
         self.planning_jobs = PlanningJobRunner()
 
-        self.mode_var = tk.StringVar(value="仿真")
+        self.mode_var = tk.StringVar(value="实物" if self._operator_only else "仿真")
+        self._init_timed_mixing()
+        self._init_open_loop()
         self.operation_var = tk.StringVar(value=self.OP_MOVE)
         self.tool_var = tk.StringVar(value=self.TOOL_MOVE_START)
         self.manual_tool_var = tk.StringVar(value=self.MANUAL_TOOL_TOGGLE)
@@ -122,6 +136,7 @@ class STM32MatrixController(
 
         self.start_cell = (1, 1)
         self.goal_cell = (18, 18)
+        if self._operator_only:self.start_cell=self.goal_cell=None
         self.secondary_cell = (1, 4)
         self.split_left_cell = (1, 0)
         self.split_right_cell = (1, 2)
@@ -184,19 +199,24 @@ class STM32MatrixController(
         self.manual_after_id = None
         self.manual_last_update_time = time.monotonic()
 
-        self.sim_camera = SimulatedCamera(
-            self.rows, self.cols, frame_size=(520, 520), margin_px=6, layout_padding_cells=2.2
-        )
-        self.detector = DropletDetector(self.sim_camera)
+        self.sim_camera = None
+        self.detector = None
+        if not self._operator_only:
+            self.sim_camera = SimulatedCamera(
+                self.rows, self.cols, frame_size=(520, 520), margin_px=6, layout_padding_cells=2.2)
+            self.detector = DropletDetector(self.sim_camera)
         self.planner = AStarPlanner(
             self.rows,
             self.cols,
             valid_cells=LAYOUT_CELLS,
             extra_edges=RESERVOIR_CONNECTIONS,
         )
-        self.sim_droplet = SimulatedDroplet(self.start_cell, speed_cells_per_sec=2.5)
-        self.sim_droplet_b = SimulatedDroplet(self.secondary_cell, speed_cells_per_sec=2.5)
-        self.sim_droplets = [self.sim_droplet]
+        self.sim_droplet = self.sim_droplet_b = None
+        self.sim_droplets = []
+        if not self._operator_only:
+            self.sim_droplet = SimulatedDroplet(self.start_cell, speed_cells_per_sec=2.5)
+            self.sim_droplet_b = SimulatedDroplet(self.secondary_cell, speed_cells_per_sec=2.5)
+            self.sim_droplets = [self.sim_droplet]
         self.split_progress = 0.0
         self.split_attempts = 0
         self.max_split_attempts = 2
@@ -293,8 +313,9 @@ class STM32MatrixController(
         self._set_connection_state(False)
         self._set_active_count(0)
         self._update_mode_ui()
-        self._render_sim_camera_frame(force_display=False)
-        self._schedule_manual_simulation_loop()
+        if not self._operator_only:
+            self._render_sim_camera_frame(force_display=False)
+            self._schedule_manual_simulation_loop()
         self._schedule_planning_job_poll()
 
         self.recv_thread = threading.Thread(target=self.receive_data, daemon=True)

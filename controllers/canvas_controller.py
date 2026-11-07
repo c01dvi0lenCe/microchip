@@ -283,6 +283,21 @@ class CanvasControllerMixin:
         for cell in sorted(RESERVOIR_CELLS):
             self._draw_cell(cell, fill=self.colors["sim_reservoir"] if simulation_view else self.colors["reservoir"], outline=self.colors["sim_reservoir_edge"] if simulation_view else self.colors["reservoir_edge"], width=1 if simulation_view else 2)
 
+        if self._operator_only:
+            self._draw_operator_command_overlay(manual_view)
+            return
+
+        if not manual_view and self._open_loop_view_active():
+            # Commanded electrodes are not inferred droplet positions.
+            for cell in self._active_cells():
+                self._draw_cell(cell, fill=self.colors['btn_on'], outline='')
+            self._draw_hardware_reminders()
+            self._draw_open_loop_overlay()
+            self._draw_hardware_reminders(outline_only=True)
+            if self.hover_cell is not None:
+                self._draw_cell(self.hover_cell, fill='', outline='#1F2A33', width=2)
+            return
+
         if not manual_view:
             for cell in self.target_shape_cells:
                 self._draw_cell(cell, fill=self.colors["target_shape"], outline=self.colors["target_edge"])
@@ -336,6 +351,7 @@ class CanvasControllerMixin:
             if simulation_view and is_reservoir_cell(cell):
                 continue
             self._draw_cell(cell, fill="#E3EFE8" if simulation_view else self.colors["btn_on"], outline="")
+        self._draw_hardware_reminders()
         if manual_view:
             self._draw_manual_electrode_ids()
             for idx, droplet in enumerate(self.manual_droplets, start=1):
@@ -398,6 +414,9 @@ class CanvasControllerMixin:
 
         if self.hover_cell is not None:
             self._draw_cell(self.hover_cell, fill="", outline="#1F2A33", width=2)
+
+        # Setup/goal fills must not erase the persistent hardware reminder edge.
+        self._draw_hardware_reminders(outline_only=True)
 
     def _draw_cell(self, cell, fill="", outline="#C6D0D8", width=1):
         if cell in CORNER_RESERVOIRS:
@@ -616,6 +635,14 @@ class CanvasControllerMixin:
         ctrl_pressed = bool(event_state & 0x0004)
         additive_pressed = shift_pressed or ctrl_pressed
 
+        if self._operator_only:
+            if manual:
+                if self.open_loop_input_var.get()=='任务选点':self._operator_pick_cell(cell)
+                else:self.manual_toggle_electrode(cell,additive=additive_pressed)
+                self._update_cell_status(cell);self._draw_matrix_canvas()
+            else:self.log('视觉任务尚未验收；开环任务请在手动电极页设置')
+            return
+
         if manual:
             if self.manual_tool_var.get() == self.MANUAL_TOOL_DROPLET:
                 self.set_manual_droplet(cell)
@@ -629,6 +656,13 @@ class CanvasControllerMixin:
                 self._render_sim_camera_frame()
             return
 
+        if self._open_loop_edit_active():
+            self.open_loop_handle_cell(cell)
+            self._update_cell_status(cell)
+            return
+        if self._timed_mix_owned:
+            self.log('定时任务运行中，路径编辑已忽略')
+            return
         tool = self.tool_var.get()
         if self.auto_running:
             self.log("闭环运行中，路径编辑已忽略")
@@ -837,6 +871,12 @@ class CanvasControllerMixin:
             return
         x_mm, y_mm = cell_center_mm(cell, self.pitch_mm)
         text = f"{self._cell_label(cell)} | 中心 ({x_mm:.1f}, {y_mm:.1f}) mm"
+        eid = electrode_id(cell[0], cell[1], self.cols)
+        fault = getattr(self, 'hardware_fault_types', {}).get(eid)
+        if fault:
+            text += f' | {fault}'
+        elif eid in getattr(self, 'hardware_reminder_ids', ()):
+            text += ' | 持续导通邻接提醒'
         labels = getattr(self, "cell_status_labels", [])
         if not labels and hasattr(self, "cell_status_label"):
             labels = [self.cell_status_label]

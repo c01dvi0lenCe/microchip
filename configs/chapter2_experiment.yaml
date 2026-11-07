@@ -41,6 +41,11 @@ state:
   min_area_px: 10.0
   max_area_px: 100000.0
   min_confidence: 0.2
+  # B1 software safety/stability defaults, still require independent Pilot validation.
+  evidence_max_gap_s: 0.25
+  arrival_max_centroid_span_mm: 0.5
+  arrival_max_coverage_span: 0.15
+  deviation_frames: 2        # sustained spatial deviation; temporal conflicts stay Unknown
 control:
   wait_s: 8.0
   max_retries: 2
@@ -50,6 +55,8 @@ control:
   source_timeout_s: 10.0
   source_frames: 5
   source_duration_s: 0.25
+  attempt_timeout_s: 16.0   # hard per-attempt cap, independent of recognized label
+  progress_epsilon_mm: 0.1 # B3: improvement in signed source-to-target progress; legacy distance fallback
 serial:
   port: null
   baudrate: 115200
