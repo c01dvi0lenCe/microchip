@@ -4,6 +4,15 @@ This context describes the concepts used to plan, simulate, observe, and control
 
 ## Language
 
+**Single-electrode cyclic ON/OFF test** (2026-11-08):
+One explicitly selected pixel repeats ON250ms/OFF250ms through the existing atomic
+transaction client until stopped. A single manual-page toggle button owns the shared
+timed-task worker and excludes other electrode tasks. Dwell starts after APPLIED
+receipt, not at physical OFF write. Stop drains in-flight work, writes target OFF
+and releases with ALL_OFF; failures mark state unknown. No external HV control or
+physical recovery measurement is implied. See
+[operator/test note](docs/single-electrode-cycle-2026-11-08.md).
+
 **Core electrode**:
 One addressable electrode in the central 20 x 20 transport array.
 

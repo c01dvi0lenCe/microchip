@@ -47,6 +47,11 @@ Close/stop must allow AM release and log flush to finish. Never permit simultane
 manual/legacy and experiment serial or camera ownership. Chapter 1 scope-test controls
 were removed at the user's request; do not restore them when merging older branches.
 
+2026-11-08 exception explicitly authorized by the user: one manual-page
+single-electrode cyclic ON/OFF start/stop button (250 ms each) is allowed.
+It uses existing atomic transactions and shared timed-task ownership; it is not
+a restored Chapter 1 test tab and must not control the external high-voltage supply.
+
 - `app_controller.py`: composition root and shared state.
 - `controllers/electrode_transaction.py`: serial atomic transaction client.
 - `controllers/arrival_confirmation.py`: stable vision gate.

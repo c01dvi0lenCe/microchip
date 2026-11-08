@@ -145,6 +145,8 @@ class TimedMixingControllerMixin:
             self._open_loop_on_applied(eid, at)
 
     def _timed_mix_tick(self):
+        if self._timed_mix_kind == 'single_cycle':
+            return self._single_cycle_tick()
         if self._timed_mix_after_id is not None:
             self.root.after_cancel(self._timed_mix_after_id)
             self._timed_mix_after_id = None
@@ -215,6 +217,8 @@ class TimedMixingControllerMixin:
     def stop_timed_mixing(self):
         if not self._timed_mix_owned:
             return
+        if self._timed_mix_kind == 'single_cycle':
+            return self._stop_single_electrode_cycle()
         self._timed_mix.stop()
         if self._timed_mix_kind == 'open_loop':
             self._cancel_open_loop_manual('operator_stop')

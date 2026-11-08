@@ -532,8 +532,17 @@ class UiControllerMixin:
             )
             self.btn_clear_manual_droplet.pack(side="left")
 
-        legend = tk.Frame(card, bg=self.colors["panel"])
-        legend.pack(fill="x", padx=10, pady=(0, 4))
+        compact_cycle = manual and not self._simulation_only
+        legend_parent = card
+        if compact_cycle:
+            legend_parent = tk.Frame(card, bg=self.colors['panel'])
+            legend_parent.pack(fill='x', padx=10, pady=(0, 4))
+        legend = tk.Frame(legend_parent, bg=self.colors["panel"])
+        if compact_cycle:
+            legend.pack(side='left')
+            self._build_single_electrode_cycle_controls(legend_parent)
+        else:
+            legend.pack(fill="x", padx=10, pady=(0, 4))
         self.matrix_legends["manual" if manual else "auto"] = legend
         self._refresh_matrix_legend(manual=manual)
 

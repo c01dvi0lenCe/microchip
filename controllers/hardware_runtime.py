@@ -212,6 +212,8 @@ class HardwareRuntimeMixin:
             return self._apply_manual_electrode_changes({eid: 1-self.buttons[eid]['state']})
         if self._hardware_manual_control_blocked():
             return
+        if hasattr(self, 'single_cycle_electrode_var'):
+            self.single_cycle_electrode_var.set(str(eid))
         current_state = self.buttons[eid]["state"]
         new_state = 1 if current_state == 0 else 0
         self._set_electrode_state(eid, new_state)
@@ -232,7 +234,12 @@ class HardwareRuntimeMixin:
         if self.auto_running:
             self.log("闭环运行中，手动电极操作已忽略")
             return
+        if self._timed_mix_owned and self._timed_mix_kind == 'single_cycle':
+            self.log('单电极循环占用电极，手动操作已忽略')
+            return
         eid = electrode_id(cell[0], cell[1], self.cols)
+        if hasattr(self, 'single_cycle_electrode_var'):
+            self.single_cycle_electrode_var.set(str(eid))
         active_ids = self._active_electrode_ids()
         current_state = self.buttons[eid]["state"]
 

@@ -34,10 +34,12 @@ from controllers.open_loop_controller import OpenLoopControllerMixin
 from controllers.operator_profile import OperatorProfileMixin
 from controllers.open_loop_manual_controller import OpenLoopManualControllerMixin
 from controllers.realtime_vision_controller import RealtimeVisionControllerMixin
+from controllers.single_electrode_cycle import SingleElectrodeCycleMixin
 from dmf.recording import ElectrodeEventStream
 
 
 class STM32MatrixController(
+    SingleElectrodeCycleMixin,
     RealtimeVisionControllerMixin,
     OpenLoopManualControllerMixin,
     OperatorProfileMixin,
@@ -127,6 +129,7 @@ class STM32MatrixController(
 
         self.mode_var = tk.StringVar(value="实物" if self._operator_only else "仿真")
         self._init_timed_mixing()
+        self._init_single_electrode_cycle()
         self._init_open_loop()
         self._init_realtime_vision()
         self.operation_var = tk.StringVar(value=self.OP_MOVE)
