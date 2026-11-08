@@ -66,9 +66,15 @@ class CameraControllerMixin:
         return detections[0] if detections else None
 
     def _show_camera_frame(self, frame_rgb):
-        image = Image.fromarray(frame_rgb)
-        native_size=image.size
+        height,width=frame_rgb.shape[:2]
+        native_size=(width,height)
         target_w, target_h = self._camera_preview_target_size()
+        scale=min(1.,target_w/width,target_h/height)
+        display_size=(max(1,round(width*scale)),max(1,round(height*scale)))
+        # Display-only reduction. The source packet, inference and saved native
+        # images remain unchanged; never allocate a 20MP Pillow preview first.
+        preview=cv2.resize(frame_rgb,display_size,interpolation=cv2.INTER_AREA) if scale<1 else frame_rgb
+        image = Image.fromarray(preview)
         image.thumbnail((target_w, target_h), RESAMPLE_FILTER)
         self._camera_display_geometry=(*native_size,*image.size)
         photo = ImageTk.PhotoImage(image=image, master=self.camera_label)

@@ -30,6 +30,7 @@ class RealtimeControllerTests(unittest.TestCase):
 
     def start(self):
         self.feature();self.app.camera_running=True
+        if hasattr(self.app,'vision_mode_var'):self.app.vision_mode_var.set('完整同帧')
         im=np.full((640,800,3),200,np.uint8);im[200:260,300:380]=0
         self.app._latest_camera_packet=FramePacket('fixture',0,0,'fixture',im)
         self.app.latest_camera_frame_bgr=im
@@ -110,6 +111,69 @@ class RealtimeControllerTests(unittest.TestCase):
         with patch.object(self.app,'_camera_native_point',return_value=(100,120)):
             self.app._vision_roi_press(object());self.app._vision_roi_release(object())
         self.assertEqual(self.app._vision_roi,domain)
+
+    def test_dual_mode_records_pixel_region_without_control_or_electrode_identity(self):
+        self.assertTrue(hasattr(self.app,'vision_mode_var'),'Dual sensing mode missing')
+        from dmf.vision.task_regions import TaskRegion
+        from dmf.vision.contracts import FrameTiming
+        self.app.camera_running=True;self.app.vision_mode_var.set('双层优先')
+        self.app._vision_settings['native_single']=False
+        self.app._vision_pixel_regions=[TaskRegion('watch',(280,180,150,120))]
+        im=np.full((640,800,3),200,np.uint8);im[200:260,300:380]=0
+        packet=FramePacket('fixture',0,0.,'host_monotonic',im,
+            FrameTiming(capture_frame_id=0,receive_monotonic_ns=time.monotonic_ns(),clock_domain='host_monotonic'))
+        self.app._latest_camera_packet=packet;self.app.latest_camera_frame_bgr=im
+        self.app.vision_package_var.set(self.temp.name);self.app._vision_output_root=Path(self.temp.name)/'sessions'
+        with patch('controllers.realtime_vision_controller.G4UNetPredictor',return_value=Predictor()):
+            self.assertTrue(self.app.start_realtime_detection())
+            until=time.monotonic()+3
+            while (self.app._vision_latest_result is None or self.app._vision_latest_result.region_id!='watch') and time.monotonic()<until:
+                self.app._poll_realtime_vision();time.sleep(.005)
+        r=self.app._vision_latest_result
+        self.assertIsNotNone(r);self.assertEqual(r.region_id,'watch');self.assertEqual(r.mask.shape,(120,150))
+        self.assertIsNone(r.target_electrode);self.assertFalse(r.control_eligible)
+        self.assertIsNone(self.app.detected_cell);self.assertEqual(self.app._active_electrode_ids(),set())
+        overlay=self.app._vision_render_bgr(r,'叠加')
+        self.assertEqual(overlay.shape,im.shape)
+
+    def test_epoch_change_clears_cached_result_before_new_observation(self):
+        self.assertTrue(hasattr(self.app,'vision_mode_var'))
+        from dmf.vision.task_regions import TaskRegion
+        self.app.camera_running=True;self.app.vision_mode_var.set('双层优先')
+        image=np.full((640,800,3),200,np.uint8)
+        self.app._latest_camera_packet=FramePacket('fixture',0,0.,'fixture',image)
+        self.app.latest_camera_frame_bgr=image
+        self.app._vision_settings['native_single']=False
+        self.app._vision_pixel_regions=[TaskRegion('watch',(280,180,150,120),epoch=0)]
+        self.app.vision_package_var.set(self.temp.name);self.app._vision_output_root=Path(self.temp.name)/'sessions'
+        with patch('controllers.realtime_vision_controller.G4UNetPredictor',return_value=Predictor()):
+            self.assertTrue(self.app.start_realtime_detection())
+            until=time.monotonic()+3
+            while (self.app._vision_latest_result is None or self.app._vision_latest_result.region_id!='watch') and time.monotonic()<until:
+                self.app._poll_realtime_vision();time.sleep(.005)
+        old=self.app._vision_latest_result
+        self.assertIsNotNone(old)
+        self.app._vision_pixel_regions=[TaskRegion('watch',(280,180,150,120),epoch=1)]
+        self.app._refresh_dual_regions()
+        self.assertNotIn('watch',self.app._vision_region_results)
+        self.assertIsNone(self.app._vision_latest_result,'old epoch result must not remain displayed')
+
+    def test_vision_mode_cannot_change_while_detector_is_running(self):
+        self.assertTrue(hasattr(self.app,'vision_mode_var'))
+        self.start()
+        self.assertEqual(str(self.app.vision_mode_combo['state']),'disabled')
+        self.app.stop_realtime_detection()
+        self.assertEqual(str(self.app.vision_mode_combo['state']),'readonly')
+
+    def test_invalid_scheduling_config_fails_closed_with_specific_error(self):
+        self.feature()
+        self.assertIn('inspection_period_s',self.app._vision_settings)
+        self.assertIn('max_inspection_age_s',self.app._vision_settings)
+        with patch('controllers.realtime_vision_controller.load_yaml',return_value={'task_period_s':0}):
+            from controllers.realtime_vision_controller import RealtimeVisionControllerMixin
+            app=object.__new__(RealtimeVisionControllerMixin)
+            app._init_realtime_vision()
+            self.assertIn('task_period_s',app._vision_config_error)
 
 
 if __name__=='__main__':unittest.main()

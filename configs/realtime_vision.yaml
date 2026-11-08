@@ -2,3 +2,8 @@ model_package: models/g4_unet
 device: auto
 batch_size: 1
 output_root: results/realtime_vision
+native_single: false
+task_period_s: 0.1
+max_task_age_s: 0.25
+max_inspection_age_s: 1.0
+inspection_period_s: 1.0
