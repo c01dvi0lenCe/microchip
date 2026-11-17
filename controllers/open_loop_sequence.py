@@ -81,6 +81,7 @@ def four_cell_missing_fields(tasks) -> dict[str, tuple[str, ...]]:
 class OpenLoopPlan:
     routes: Mapping[str, tuple[int, ...]]
     hold_ids: frozenset[int] = frozenset()
+    startup_clear_ids: frozenset[int] = frozenset()
     length: int = field(init=False)
 
     def __post_init__(self):
@@ -89,6 +90,7 @@ class OpenLoopPlan:
             raise ValueError('至少需要一组非空路径')
         object.__setattr__(self, 'routes', MappingProxyType(routes))
         object.__setattr__(self, 'hold_ids', frozenset(self.hold_ids))
+        object.__setattr__(self, 'startup_clear_ids', frozenset(self.startup_clear_ids))
         object.__setattr__(self, 'length', max(map(len, routes.values())))
 
     def positions_at(self, index):
@@ -100,7 +102,7 @@ class OpenLoopPlan:
         return frozenset(self.positions_at(index).values()) | self.hold_ids
 
 
-def compile_four_cell_tasks(tasks, cycles, *, hold_ids=(), forbidden_ids=None):
+def compile_four_cell_tasks(tasks, cycles, *, hold_ids=(), initial_active_ids=(), forbidden_ids=None):
     """Expand each clicked ring: full cycles followed by its forward prefix."""
     if isinstance(cycles, bool) or not isinstance(cycles, int) or not 1 <= cycles <= 9999:
         raise ValueError('圈数须为1–9999整数')
@@ -136,10 +138,12 @@ def compile_four_cell_tasks(tasks, cycles, *, hold_ids=(), forbidden_ids=None):
         rotated = ring[offset:] + ring[:offset]
         lap = rotated[1:] + rotated[:1]
         routes[group] = (start,) + lap * cycles + rotated[1:rotated.index(target) + 1]
-    return compile_routes(routes, hold_ids=hold_ids, forbidden_ids=forbidden_ids)
+    return compile_routes(routes, hold_ids=hold_ids, initial_active_ids=initial_active_ids,
+                          forbidden_ids=forbidden_ids)
 
 
-def compile_routes(routes: Mapping[str, Sequence[int]], *, hold_ids=(), forbidden_ids=None):
+def compile_routes(routes: Mapping[str, Sequence[int]], *, hold_ids=(), initial_active_ids=(),
+                   forbidden_ids=None):
     """Validate one frozen, synchronized command sequence including holds.
 
     All distinct previous/current global transitions are checked once, keeping
@@ -163,11 +167,14 @@ def compile_routes(routes: Mapping[str, Sequence[int]], *, hold_ids=(), forbidde
             if abs(ac[0] - bc[0]) + abs(ac[1] - bc[1]) > 1:
                 raise ValueError(f'组{group} 全局步{index}: {a}→{b}不是核心四邻接')
         frozen[group] = route
-    used = holds | frozenset(eid for route in frozen.values() for eid in route)
+    route_ids = frozenset(eid for route in frozen.values() for eid in route)
+    active = frozenset(_hold_id(eid) for eid in initial_active_ids)
+    holds |= active - route_ids
+    used = holds | route_ids
     blocked = used & forbidden
     if blocked:
         raise ValueError(f'路径/保持点经过故障保护区: {sorted(blocked)}')
-    plan = OpenLoopPlan(frozen, holds)
+    plan = OpenLoopPlan(frozen, holds, active & route_ids)
     cells = {eid: cell_from_electrode_id(eid) for eid in used}
     zones = {eid: pull_risk_neighbors(cell) for eid, cell in cells.items()}
 
@@ -216,6 +223,12 @@ class _ActiveRoute(Sequence):
         return self._plan.active_at(index)
 
 
+@dataclass(frozen=True)
+class StartupClear:
+    """OFF-only preparation transaction; never a movement or dwell."""
+    ids: frozenset[int]
+
+
 class TimedPlanSequence:
     """At most one full frame pending; APPLIED is electrical, not vision."""
     def __init__(self, plan, dwell_s, *, manual=False):
@@ -239,6 +252,7 @@ class TimedPlanSequence:
         self._stopped = False
         self._pending_requested_at = None
         self._pending_resume_anchor = None
+        self._startup_clear = StartupClear(plan.startup_clear_ids) if plan.startup_clear_ids else None
 
     def _time(self, value, *, pending_history=False):
         if (isinstance(value, bool) or not isinstance(value, (int, float))
@@ -259,9 +273,14 @@ class TimedPlanSequence:
             self.running = False
             self.complete = True
             return None
-        if self.index and (self.manual or self.paused) and not manual_step:
-            return None
-        self.pending = self.route[self.index]
+        if not manual_step:
+            if self.index and self.manual:
+                return None
+            # Manual mode always starts its source automatically; an explicit
+            # pause during startup clearing, however, holds the source OFF.
+            if self.paused and (self.index or self.plan.startup_clear_ids):
+                return None
+        self.pending = self._startup_clear or self.route[self.index]
         self._pending_requested_at = now
         self._pending_resume_anchor = None
         return self.pending
@@ -276,6 +295,10 @@ class TimedPlanSequence:
         if at < self._pending_requested_at:
             raise ValueError('APPLIED predates its pending request')
         self._last_time = max(self._last_time, at)
+        if isinstance(target, StartupClear):
+            self._startup_clear = self.pending = None
+            self._pending_requested_at = self._pending_resume_anchor = None
+            return
         self.active_id = self.pending
         self.pending = None
         self.index += 1

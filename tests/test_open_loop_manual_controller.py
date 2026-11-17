@@ -150,6 +150,7 @@ class SharedManualTests(unittest.TestCase):
         self.assertEqual(self.app.buttons[350]['state'],0)
 
     def test_external_original_hold_can_be_removed_permanently(self):
+        self.app.electrode_event_stream.emit(dict(event='applied',changes={350:1}))
         self.app.update_ui_only(350,1); self.assertTrue(self.app.start_open_loop()); self.drain()
         self.assertEqual(self.app._open_loop_plan.hold_ids,{350})
         self.assertTrue(self.app._apply_manual_electrode_changes({350:0})); self.drain()

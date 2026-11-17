@@ -1,3 +1,5 @@
+import csv
+import gc
 import json
 from pathlib import Path
 import tempfile
@@ -49,6 +51,17 @@ class OpenLoopControllerTests(unittest.TestCase):
         self.assertTrue(self.app.start_open_loop())
         self.assertEqual(self.app._active_electrode_ids(),{190,251,350})
         self.assertEqual(self.app._open_loop_plan.hold_ids,{350})
+
+    def test_multigroup_preflight_partitions_full_rings_without_output(self):
+        self.groups()
+        active={190,211,210,252,272,350}
+        for eid in active:self.app.update_ui_only(eid,1)
+        plan=self.app.precheck_open_loop()
+        self.assertIsNotNone(plan,self.app.open_loop_status_var.get())
+        self.assertEqual(plan.hold_ids,{350})
+        self.assertEqual(plan.startup_clear_ids,active-{350})
+        self.assertEqual(self.app._active_electrode_ids(),active)
+        self.assertEqual(list(Path(self.temp.name).iterdir()),[])
 
     def test_conflict_refuses_all_groups_without_partial_commands(self):
         self.groups();self.app.open_loop_groups[1].update(start=190,ring=[190,191,211,210],target=190)
@@ -202,5 +215,194 @@ class OpenLoopControllerTests(unittest.TestCase):
         self.assertTrue(self.app.hardware_state_uncertain)
         self.assertEqual(self.app._timed_mix.index,1)
 
+
+class RouteStartupTests(unittest.TestCase):
+    """Use the actual BEGIN/SET/COMMIT client; only the transport is in memory."""
+    def setUp(self):
+        gc.collect()  # finalize old Tk objects on their owning (test) thread
+        for guard in (patch('serial.tools.list_ports.comports',return_value=[]),
+                      patch('serial.Serial',side_effect=AssertionError('No hardware'))):
+            guard.start(); self.addCleanup(guard.stop)
+        self.root=tk.Tk(); self.root.withdraw()
+        self.app=STM32MatrixController(self.root,operator_only=True)
+        self.temp=tempfile.TemporaryDirectory()
+        self.app.open_loop_output_root=Path(self.temp.name)
+        app=self.app
+        app.path=[cell_from_electrode_id(i) for i in (190,191,192)]
+        app.start_cell,app.goal_cell=app.path[0],app.path[-1]
+        app.open_loop_dwell_var.set(60)
+        self.lines=[]
+        self.commit=threading.Event()
+        self.sequence=None
+        def write(payload):
+            line=payload.decode().strip(); self.lines.append(line)
+            client=app.electrode_transactions
+            if line.startswith('BEGIN:'):
+                self.sequence=int(line.split(':')[1])
+                client.feed_line(f'ACK:{self.sequence}:BEGIN')
+            elif line.startswith('SET:'):
+                client.feed_line(f'ACK:{self.sequence}:SET:{line.split(":")[1]}')
+            elif line.startswith('COMMIT:'):
+                self.commit.set()  # tests supply/withhold the APPLIED notification
+            elif line=='ALL_OFF':
+                client.feed_line('ACK:ALL_OFF')
+            return len(payload)
+        app.ser=SimpleNamespace(write=write,close=lambda:None,is_open=True,in_waiting=0)
+        app.is_connected=True
+        app.electrode_transactions.ack_timeout_s=2
+        app.electrode_transactions.max_retries=0
+        app.electrode_transactions.reset_sequence(21)
+        app.electrode_event_stream.emit(dict(event='all_off_confirmed'))
+
+    def tearDown(self):
+        app=self.app
+        if app._timed_mix_owned:
+            app.stop_timed_mixing()
+            if app._timed_mix_worker:
+                self.commit.wait(2); self.ack()
+        app.is_connected=False; app.ser=None; app._open_loop_release_required=False
+        for token in self.root.tk.call('after','info'):self.root.after_cancel(token)
+        app.on_close(); app.recv_thread.join(2); self.temp.cleanup()
+        del self.app,self.root,app
+        gc.collect()
+
+    def acknowledge_initial(self,ids):
+        self.app.electrode_event_stream.emit(dict(event='applied',changes={i:1 for i in ids}))
+
+    def ack(self, *, error=False):
+        self.commit.clear()
+        self.app.electrode_transactions.feed_line('ERR:test' if error else f'ACK:{self.sequence}:APPLIED')
+        self.app._timed_mix_worker.join(3)
+        self.assertFalse(self.app._timed_mix_worker.is_alive())
+        self.app._timed_mix_tick()
+
+    def begin_cleanup(self,initial=(191,350)):
+        self.acknowledge_initial(initial)
+        self.assertTrue(self.app.start_open_loop(),self.app.open_loop_status_var.get())
+        self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines,['BEGIN:21']+[f'SET:{i}:0' for i in sorted(set(initial)&{190,191,192})]+['COMMIT:21'])
+        self.assertIsNone(self.app._timed_mix.deadline)
+        self.assertEqual(self.app._timed_mix.index,0)
+
+    def test_cleanup_is_separate_acknowledged_delta_then_original_first_step(self):
+        app=self.app
+        self.acknowledge_initial([350])
+        app.update_ui_only(171,1)  # stale display conflict, not a confirmed hold
+        preview=app.precheck_open_loop()
+        self.assertIsNotNone(preview,app.open_loop_status_var.get())
+        self.assertEqual(preview.hold_ids,{350})
+        self.assertEqual(self.lines,[])
+        self.begin_cleanup((190,191,192,350))  # start must re-read acknowledged state
+        app.electrode_transactions.feed_line('ACK:999:APPLIED')
+        app._timed_mix_tick()
+        self.assertFalse(app.step_open_loop())
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+        self.ack()
+        self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines[-3:],['BEGIN:22','SET:190:1','COMMIT:22'])
+        self.assertEqual(app.electrode_event_stream.active,{350})
+        self.assertEqual(app._timed_mix.index,0)
+        self.assertIsNone(app._timed_mix.deadline)
+        self.ack()
+        self.assertEqual(app._timed_mix.index,1)
+        self.assertIsNotNone(app._timed_mix.deadline)
+        self.assertEqual(app._active_electrode_ids(),{190,350})
+        app.stop_timed_mixing()
+        with (app._open_loop_output_dir/'steps.csv').open(encoding='utf-8-sig',newline='') as f:
+            self.assertEqual([(r['event'],r['phase']) for r in csv.DictReader(f)],
+                             [('request','0'),('applied_confirmed','0')])
+        self.assertNotIn('ALL_OFF',self.lines)
+
+    def test_stop_during_cleanup_never_activates_first_step(self):
+        self.begin_cleanup()
+        self.app.stop_timed_mixing()
+        self.ack()
+        self.assertFalse(self.app._timed_mix_owned)
+        self.assertEqual(self.app.electrode_event_stream.active,{350})
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+        self.assertEqual(self.app._timed_mix.index,0)
+
+    def test_close_drains_cleanup_before_release_without_start(self):
+        self.begin_cleanup()
+        self.app.on_close()
+        self.assertTrue(self.app._timed_mix_owned)
+        self.assertNotIn('ALL_OFF',self.lines)
+        self.ack()
+        self.assertEqual(self.lines,['BEGIN:21','SET:191:0','COMMIT:21','ALL_OFF'])
+        self.assertFalse(self.app._timed_mix_owned)
+
+    def test_failed_cleanup_leaves_unknown_and_no_first_step(self):
+        self.begin_cleanup()
+        self.ack(error=True)
+        self.assertFalse(self.app._timed_mix_owned)
+        self.assertTrue(self.app.hardware_state_uncertain)
+        self.assertFalse(self.app.electrode_event_stream.known)
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+        self.assertEqual(self.app._timed_mix.index,0)
+
+    def test_unknown_during_cleanup_blocks_first_step_even_after_matching_ack(self):
+        self.begin_cleanup()
+        self.app.electrode_event_stream.emit(dict(event='state_unknown'))
+        self.ack()
+        self.assertFalse(self.app._timed_mix_owned)
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+
+    def test_pause_during_cleanup_defers_first_step_until_resume(self):
+        self.begin_cleanup()
+        self.app.pause_resume_open_loop()
+        self.ack()
+        self.assertTrue(self.app._timed_mix_owned)
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+        self.assertIsNone(self.app._timed_mix.deadline)
+        self.app.pause_resume_open_loop(); self.app._timed_mix_tick()
+        self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines[-3:],['BEGIN:22','SET:190:1','COMMIT:22'])
+
+    def test_real_conflict_outside_route_is_not_silently_cleared(self):
+        self.acknowledge_initial((191,171))
+        self.assertFalse(self.app.start_open_loop())
+        self.assertIn('171',self.app.open_loop_status_var.get())
+        self.assertEqual(self.app.electrode_event_stream.active,{191,171})
+        self.assertEqual(self.lines,[])
+
+    def test_multigroup_routes_clean_once_then_one_joint_source_activation(self):
+        app=self.app
+        app.open_loop_kind_var.set('多组四宫格'); app.on_open_loop_kind_changed()
+        for ring,target in (([190,191,211,210],211),([251,252,272,271],251)):
+            app.open_loop_add_group()
+            app.open_loop_groups[-1].update(start=ring[0],ring=ring,target=target)
+        self.acknowledge_initial([190,211,252,271,350])
+        self.assertTrue(app.start_open_loop(),app.open_loop_status_var.get())
+        self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines,['BEGIN:21','SET:190:0','SET:211:0','SET:252:0','SET:271:0','COMMIT:21'])
+        self.ack()
+        self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines[-4:],['BEGIN:22','SET:190:1','SET:251:1','COMMIT:22'])
+        self.ack()
+        self.assertEqual(app.electrode_event_stream.active,{190,251,350})
+
+    def test_manual_intent_during_cleanup_is_serialized_and_does_not_advance(self):
+        self.begin_cleanup()
+        app=self.app
+        self.assertFalse(app._apply_manual_electrode_changes({191:1}))
+        self.assertTrue(app._apply_manual_electrode_changes({350:0}))
+        self.assertEqual(self.lines[-1],'COMMIT:21')
+        self.ack(); self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines[-3:],['BEGIN:22','SET:190:1','COMMIT:22'])
+        self.ack(); self.assertTrue(self.commit.wait(2))
+        self.assertEqual(self.lines[-3:],['BEGIN:23','SET:350:0','COMMIT:23'])
+        self.ack()
+        self.assertEqual(app._timed_mix.index,1)
+        self.assertEqual(app.electrode_event_stream.active,{190})
+
+    def test_new_inflight_during_preflight_rejects_start(self):
+        precheck=self.app.precheck_open_loop
+        def changed():
+            plan=precheck()
+            self.app.electrode_event_stream.emit(dict(event='transaction_requested',request_id='other'))
+            return plan
+        with patch.object(self.app,'precheck_open_loop',side_effect=changed):
+            self.assertFalse(self.app.start_open_loop())
+        self.assertEqual(self.lines,[])
 
 if __name__=='__main__':unittest.main()

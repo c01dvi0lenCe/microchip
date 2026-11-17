@@ -13,7 +13,7 @@
 - [ ] 检出 `codex/whole-chip-realtime-vision` 分支，按 `docs/whole-chip-realtime-vision.md` 建立独立视觉环境并安装已匹配的依赖。
 - [ ] 在目标电脑安装与工业相机型号、驱动版本匹配的厂商 MVS 软件及 Python 绑定；不把厂商 SDK 或 DLL 提交到仓库。
 - [ ] 复制 `configs/camera_mvs.local.example.yaml` 为本地配置，填写本机 SDK 绑定目录及相机序列号；本地配置不提交、不上传。
-- [ ] 将独立 G4 推理模型包复制至 `models/g4_unet` 或通过界面选择外部目录；用部署文档中的 SHA256 核对权重。模型包不是 Git 交付物。
+- [ ] 按[快速部署](camera-pc-quickstart.md)从 GitHub Release 获取冻结 G4 推理包，校验后放到 `models/g4_unet`，做一次不连接硬件的真实模型推理。仅克隆代码不会下载权重。
 - [ ] 首次启动只做依赖/模型/SDK 预检，不自动连接相机、串口或高压输出。
 
 ### 2. 实际取流核验

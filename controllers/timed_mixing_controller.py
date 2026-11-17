@@ -8,6 +8,7 @@ import tkinter as tk
 
 from .timed_mixing import TimedMixing, reminder_ids, STUCK_ON_IDS, STUCK_OFF_IDS
 from .open_loop_manual_controller import ManualTransaction
+from .open_loop_sequence import StartupClear
 
 
 class TimedMixingControllerMixin:
@@ -94,15 +95,17 @@ class TimedMixingControllerMixin:
         return True
 
     def _timed_mix_submit(self, eid):
-        old = self._active_electrode_ids()
-        targets = {eid} if isinstance(eid, int) else set(eid)
-        if self._timed_mix_kind == 'open_loop':
-            targets = set(self._open_loop_composed_targets(self._timed_mix.index))
-        changes = {i: 0 for i in old - targets}
-        changes.update({i: 1 for i in targets - old})
-        if not changes:
-            # Reassert the starting hold through a fresh acknowledged transaction.
-            changes.update({i: 1 for i in targets})
+        if isinstance(eid, StartupClear):
+            changes = {i: 0 for i in eid.ids}
+        else:
+            old = self._active_electrode_ids()
+            targets = (self._open_loop_composed_targets(self._timed_mix.index)
+                       if self._timed_mix_kind == 'open_loop' else {eid})
+            changes = {i: 0 for i in old - targets}
+            changes.update({i: 1 for i in targets - old})
+            if not changes:
+                # Reassert an unchanged command frame through the usual ACK path.
+                changes.update({i: 1 for i in targets})
         if self.is_simulation_mode():
             self._timed_mix_accept(eid, changes, time.monotonic())
             return
@@ -138,6 +141,10 @@ class TimedMixingControllerMixin:
             self.update_ui_only(changed, state)
         self._timed_mix.applied(eid, at)
         prefix = '模拟生效' if self._timed_mix_mode == '仿真' else 'APPLIED已接收'
+        if isinstance(eid, StartupClear):
+            self.log(f'启动清理{prefix}：已关闭路径电极{sorted(eid.ids)}，未计入路径步或停留')
+            self.open_loop_status_var.set(f'启动清理{prefix}；尚未开始首步')
+            return
         label = sorted(self._active_electrode_ids()) if self._timed_mix_kind == 'open_loop' else eid
         self.timed_mix_status_var.set(f'{prefix} {label} · {self._timed_mix.index-1}/{len(self._timed_mix.route)-1}步')
         self.log(f'定时电极 {prefix}：电极{label}；从此计时{self._timed_mix.dwell_s:g}s')
@@ -158,7 +165,7 @@ class TimedMixingControllerMixin:
         if self._timed_mix_kind == 'open_loop' and self._timed_mix_mode != '仿真':
             with self.electrode_event_stream.lock:
                 known = self.electrode_event_stream.known
-            if not known:
+            if not known or self.hardware_state_uncertain:
                 self.hardware_state_uncertain = True
                 self._timed_mix.stop()
                 self.timed_mix_status_var.set('电极状态失去确认，停止后续步进')
@@ -190,7 +197,17 @@ class TimedMixingControllerMixin:
             self._finish_timed_mixing()
             return
         if self._timed_mix_worker is None:
-            if self._shared_open_loop_manual() and self._dispatch_open_loop_manual():
+            starting = self._timed_mix_kind == 'open_loop' and self._timed_mix.index == 0
+            if starting and self._timed_mix_mode != '仿真':
+                reason = self._open_loop_state_rejection(self._active_electrode_ids())
+                if reason:
+                    self._timed_mix.stop()
+                    self.log(f'启动准备中止：{reason}')
+                    self._cancel_open_loop_manual(reason)
+                    self._finish_timed_mixing()
+                    return
+            if (self._shared_open_loop_manual() and (not starting or self._timed_mix.paused)
+                    and self._dispatch_open_loop_manual()):
                 self._timed_mix_after_id = self.root.after(20, self._timed_mix_tick)
                 return
             if not self._timed_mix.running:

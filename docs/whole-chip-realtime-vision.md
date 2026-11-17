@@ -10,7 +10,7 @@
 
 1. 使用64位Windows及Python 3.14，检出`codex/whole-chip-realtime-vision`分支。
 2. 双击仓库根目录`setup_vision_env.cmd`。此入口建立独立`.venv-vision`并安装`requirements-vision.txt`中的G4匹配依赖；不改变普通上位机的Python环境。CUDA不可用时采用CPU，速度需要实测。
-3. 单独复制推理模型文件夹到`models/g4_unet`，其中必须有`manifest.json`与`unet_state.pt`。也可启动后通过“模型包／选择”指定外部文件夹。权重、训练状态、SDK、视频和人工GT均不随Git分发。
+3. 从本仓库的 [G4 推理模型 Release](https://github.com/c01dvi0lenCe/microchip/releases/tag/g4-unet-inference-v1) 下载 [g4_unet_inference_v1.zip](https://github.com/c01dvi0lenCe/microchip/releases/download/g4-unet-inference-v1/g4_unet_inference_v1.zip)。按[相机电脑快速部署](camera-pc-quickstart.md)核对压缩包摘要，再把包内的 `g4_unet` 文件夹放到项目的 `models` 下。也可选择外部模型目录。权重由 GitHub Release 分发，不在 Git 提交中；厂商 SDK、训练状态、视频和人工 GT 不上传。
 4. 在相机电脑安装厂商MVS及其Python绑定。复制`configs/camera_mvs.local.example.yaml`为`configs/camera_mvs.local.yaml`，按实际安装填写SDK的`MvImport`文件夹与相机序列号；共享模板中的两个字段为空。
 5. 双击`start_vision_gui.cmd`。预检会报告依赖、模型校验、CUDA及SDK绑定路径，但不会连接相机或串口。缺少模型或SDK时仍可进入普通上位机；缺少基础GUI依赖时明确报错。
 6. 人工开启相机预览，等待真实图像后点击“启动检测”。按需切换“原图／叠加／Mask”。自动视觉控制仍保持禁用；本阶段不要求连接串口。
@@ -35,7 +35,7 @@ cd microchip
 |训练协议|SHA256 `b89b997e4478ef470b9dbb119f7b956a0a62f53428d4cc8ae5b9f76b9489675f`|
 |包中manifest|包含来源、权重摘要、架构和完整预处理契约；加载前检查|
 
-本机模型包保存在章节资料目录`真实分割研究/2026-11-07_整芯片检测_G4推理模型_v1`。此路径仅供本机取件，不是异机运行依赖。
+版本以 Release 和上述摘要为准；目标电脑不需要访问开发机上的章节资料目录。压缩包 SHA256：`abee591817d64853ef71f2ab9b8b947f51a29fff1f1d36646da86704bd422a9b`。
 
 ## 检测与显示规则
 
@@ -49,7 +49,19 @@ cd microchip
 
 ## 保存与时间含义
 
+### 录像联动检测
+
+默认勾选“录像联动检测”。先开启相机预览，并按需添加像素观察区；点击“开始录像”后会准备/复用检测器，模型就绪后请求相机录像。模型准备最多等待30秒；缺模型或检测失败时仍保留原录像，并提示检测不完整。
+
+点击“停止录像”后，不再向检测器提交新图像，已开始的完整区域/图像完成后保存Mask与日志，再结束本次保存。停止录像不停止开环任务、不切换或关闭电极。若检测在录像前已独立启动，本段录像会复用它，但结束联动录像也会停止该检测。取消勾选则保留原来的独立录像/检测行为。
+
+录像旁新增同名 `.vision-session.json`：保存实验ID、原录像已有逐帧/电极/对照侧车路径、检测目录、主机命令返回边界和错误。检测目录可能包含准备阶段的帧，不能直接把目录中所有结果当作录像内帧，须用来源帧号和时间表关联。联动记录仅存实际处理的Mask，不补造跳过帧；未生成自动叠加MP4。完整同帧模式的联动PNG写盘耗时包含在实际处理耗时中。
+
+保存结束前请不要强制关闭进程。界面提示“检测/录像有缺失”时检查索引中的 `errors`，不能把部分数据当完整实验。关闭相机或命令失败会保留不完整索引，异常关闭的主机回调时间不标为成功录像ACK或曝光时间。
+
 每次检测建立独立`results/realtime_vision/<会话>`，持续保存`frames.csv`、`events.csv`、`components.csv`，停止后生成`manifest.json`。原图、Mask和叠加图仅在点击“保存结果”时写入同一源帧快照，避免默认大量写盘。
+
+上述三个CSV为完整同帧模式；双层模式使用`regions.csv`、`events.csv`和实际区域Mask。独立完整同帧检测默认仅手动快照保存Mask；录像联动时自动保存实际完成的Mask。
 
 设备计数、主机接收时间、当前推理起止时间分别记录。历史录像的原始接收时间不是本次处理时刻，主机接收不是已确认曝光时间。该功能不证明图像发生在真实高压输出之后。
 

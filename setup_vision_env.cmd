@@ -6,7 +6,11 @@ if not exist ".venv-vision\Scripts\python.exe" (
 )
 ".venv-vision\Scripts\python.exe" -m pip install -r requirements-vision.txt --extra-index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 goto error
-echo Vision environment installed. Copy the model package to models\g4_unet.
+".venv-vision\Scripts\python.exe" -m pip check
+if errorlevel 1 goto error
+echo Vision dependencies installed. Model and MVS camera SDK are separate.
+echo G4 model: https://github.com/c01dvi0lenCe/microchip/releases/tag/g4-unet-inference-v1
+echo For the checksum, extraction and offline test see docs\camera-pc-quickstart.md
 pause
 exit /b 0
 :error

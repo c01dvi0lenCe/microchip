@@ -28,6 +28,43 @@ class RealtimeControllerTests(unittest.TestCase):
 
     def feature(self):self.assertTrue(hasattr(self.app,'start_realtime_detection'),'Realtime sensing UI missing')
 
+    def test_recording_detection_link_is_enabled_by_default(self):
+        self.assertTrue(hasattr(self.app,'recording_vision_var'))
+        self.assertTrue(self.app.recording_vision_var.get())
+
+    def test_record_button_starts_and_stops_sensing_without_electrode_actions(self):
+        from concurrent.futures import Future
+        from types import SimpleNamespace
+        self.app.camera_running=True
+        image=np.full((384,384,3),200,np.uint8)
+        self.app._latest_camera_packet=FramePacket('fixture',0,0.,'fixture',image)
+        self.app.latest_camera_frame_bgr=image
+        self.app.vision_package_var.set(self.temp.name)
+        self.app._vision_output_root=Path(self.temp.name)/'sessions'
+        video=Path(self.temp.name)/'capture.avi';commands=[]
+        def command(method,*args):
+            commands.append(method);future=Future();future.set_result(str(video));return future
+        self.app._hardware_camera_source=SimpleNamespace(submit_camera_command=command)
+        try:
+            with patch('controllers.realtime_vision_controller.G4UNetPredictor',return_value=Predictor()), \
+                 patch.object(self.app,'_camera_recording_output_path',return_value=video), \
+                 patch.object(self.app.electrode_transactions,'apply_changes') as electrodes:
+                self.app.toggle_camera_recording()
+                until=time.monotonic()+4
+                while not self.app.camera_recording and time.monotonic()<until:
+                    self.root.update();time.sleep(.01)
+                self.assertTrue(self.app.camera_recording)
+                self.app.toggle_camera_recording()
+                until=time.monotonic()+4
+                while self.app._recording_vision is not None and time.monotonic()<until:
+                    self.root.update();time.sleep(.01)
+                self.assertIsNone(self.app._recording_vision)
+                self.assertEqual(commands,['start_recording','stop_recording'])
+                electrodes.assert_not_called()
+                self.assertTrue(video.with_suffix('.vision-session.json').exists())
+                self.assertTrue(self.app.camera_running)
+        finally:self.app._hardware_camera_source=None
+
     def start(self):
         self.feature();self.app.camera_running=True
         if hasattr(self.app,'vision_mode_var'):self.app.vision_mode_var.set('完整同帧')

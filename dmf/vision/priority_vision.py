@@ -82,7 +82,7 @@ class PriorityVisionDetector:
         self.task_period_s=float(task_period_s);self.max_task_age_s=float(max_task_age_s)
         self.max_inspection_age_s=float(max_inspection_age_s);self.inspection_period_s=float(inspection_period_s)
         self.clock_policy=clock_policy;self.inspection_enabled=bool(inspection_enabled)
-        self.condition=threading.Condition();self.stopping=threading.Event()
+        self.condition=threading.Condition();self.stopping=threading.Event();self.finishing=threading.Event()
         self.journal=RegionJournal(self.output,save_masks);self.log=self.journal.csv
         self.latest=None;self.generation=0;self.last_key=None;self.last_time=None;self.last_domain=None
         self.source_floor_generation=0
@@ -118,7 +118,7 @@ class PriorityVisionDetector:
     def update_regions(self,regions):
         fresh=self._region_map(regions)
         with self.condition:
-            if self.stopping.is_set():return False
+            if self.stopping.is_set() or self.finishing.is_set():return False
             for key,region in fresh.items():
                 if self.regions.get(key)!=region:
                     self.min_generation[key]=self.generation+1
@@ -134,7 +134,7 @@ class PriorityVisionDetector:
 
     def submit(self,packet):
         with self.condition:
-            if self.stopping.is_set() or self.journal.error:return False
+            if self.stopping.is_set() or self.finishing.is_set() or self.journal.error:return False
             key=(packet.video_id,packet.capture_identity)
             same=self.last_key is not None and key[0]==self.last_key[0]
             history=self.source_history.get(key[0])
@@ -183,6 +183,11 @@ class PriorityVisionDetector:
         with self.condition:
             self.stopping.set();self.latest=None;self.results.clear();self.condition.notify_all()
 
+    def finish(self):
+        """Seal input; drain only regions already started, then flush logs."""
+        with self.condition:
+            self.finishing.set();self.condition.notify_all()
+
     def _job(self,region,latest,*,inspection=False,tiles=None,cycle_end=False):
         packet,submitted,generation=latest
         region.validate_packet(packet)
@@ -193,6 +198,7 @@ class PriorityVisionDetector:
 
     def _choose(self):
         # Called with condition held. One returned job means exactly one tile.
+        if self.finishing.is_set():return next(iter(self.jobs.values()),None)
         if self.latest is None:return None
         packet,_,generation=self.latest;now=time.perf_counter()
         ids=tuple(self.regions)
@@ -301,6 +307,7 @@ class PriorityVisionDetector:
             while not self.stopping.is_set():
                 if self.journal.error:raise RuntimeError(self.journal.error)
                 with self.condition:
+                    if self.finishing.is_set() and not self.jobs:break
                     job=self._choose()
                     if job is None:self.condition.wait(.01);continue
                 tile=job.tiles[job.index]

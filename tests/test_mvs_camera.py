@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from ctypes import c_int
@@ -79,6 +80,13 @@ class MvsCameraFrameTests(unittest.TestCase):
             def MV_CC_StartRecord(self, value):
                 self.started_with = value
                 return 0
+            def MV_CC_ClearImageBuffer(self):
+                return 0
+            def MV_CC_SetGrabStrategy(self, strategy):
+                return 0
+            def MV_CC_GetImageBuffer(self, frame, timeout):
+                time.sleep(.005)
+                return 0x80000007
             def MV_CC_StopRecord(self):
                 self.stopped += 1
                 return 0
@@ -86,6 +94,8 @@ class MvsCameraFrameTests(unittest.TestCase):
         camera = MvsCamera.__new__(MvsCamera)
         camera.camera = Camera()
         camera.headers = SimpleNamespace(
+            MV_FRAME_OUT=SimpleNamespace,
+            MV_GrabStrategy_LatestImagesOnly=1, MV_GrabStrategy_OneByOne=0,
             MVCC_INTVALUE=Value,
             MVCC_ENUMVALUE=Value,
             MVCC_FLOATVALUE=Value,
@@ -118,8 +128,11 @@ class MvsCameraFrameTests(unittest.TestCase):
         camera=MvsCamera.__new__(MvsCamera)
         camera.recording=False
         camera.headers=SimpleNamespace(MV_CC_RECORD_PARAM=SimpleNamespace,
-            MvGvspPixelType=c_int,MV_FormatType_AVI=1)
-        camera.camera=SimpleNamespace(MV_CC_StartRecord=lambda record:0,MV_CC_StopRecord=lambda:0)
+            MvGvspPixelType=c_int,MV_FormatType_AVI=1,MV_FRAME_OUT=SimpleNamespace,
+            MV_GrabStrategy_LatestImagesOnly=1,MV_GrabStrategy_OneByOne=0)
+        camera.camera=SimpleNamespace(MV_CC_StartRecord=lambda record:0,MV_CC_StopRecord=lambda:0,
+            MV_CC_SetGrabStrategy=lambda s:0,
+            MV_CC_ClearImageBuffer=lambda:0,MV_CC_GetImageBuffer=lambda f,t:time.sleep(.005) or 0x80000007)
         with tempfile.TemporaryDirectory() as folder:
             video=Path(folder)/'test.avi'
             reserved=sidecar_paths(video)['timestamps'];reserved.write_text('preserve')

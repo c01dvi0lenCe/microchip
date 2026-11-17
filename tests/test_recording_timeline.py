@@ -1,12 +1,10 @@
 import csv
-import ctypes
 import json
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import cv2
@@ -16,8 +14,7 @@ import yaml
 from dmf.recording import (AsyncCsvLog, ElectrodeEventStream, RecordingJournal,
     FRAME_FIELDS, load_recorded_timestamps, sidecar_paths)
 from dmf.experiment.sources import VideoSource, LiveSource
-from dmf.experiment.mvs_camera import MvsCamera
-from tests.test_mvs_camera import PixelTypes
+from tests.test_mvs_recording_worker import RecordingSdk, synthetic_camera
 from dmf.vision.cli import extract_frames
 from dmf.vision.pipeline import run_baseline
 
@@ -185,29 +182,25 @@ class RecordingTimelineTests(unittest.TestCase):
         finally:source.close();source.worker.join(1)
 
     def test_sdk_raw_ticks_are_not_mislabelled_as_seconds(self):
-        raw=ctypes.create_string_buffer(bytes(16))
-        info=SimpleNamespace(nFrameLen=16,nWidth=4,nHeight=4,enPixelType=1,
-            nFrameNum=987,nDevTimeStampHigh=2,nDevTimeStampLow=42,nHostTimeStamp=123)
-        def get_buffer(out,timeout):
-            out.stFrameInfo=info;out.pBufAddr=ctypes.addressof(raw);return 0
-        camera=MvsCamera.__new__(MvsCamera)
-        camera.closed=False;camera.started=True;camera.recording=True
-        camera.headers=SimpleNamespace(MV_FRAME_OUT=SimpleNamespace)
-        camera.pixels=PixelTypes
-        camera.camera=SimpleNamespace(MV_CC_GetImageBuffer=get_buffer,MV_CC_FreeImageBuffer=lambda f:0)
-        camera._input_record_frame=lambda f:None
+        sdk=RecordingSdk()
+        camera=synthetic_camera(sdk)
         with tempfile.TemporaryDirectory() as folder:
-            video=Path(folder)/'sdk.avi';self.make_video(video,1)
-            camera.recording_journal=RecordingJournal(video,20)
-            before=time.monotonic_ns();image=camera.read(.1);after=time.monotonic_ns()
-            camera.recording_journal.close()
-            row=rows(camera.recording_journal.paths['timestamps'])[0]
+            video=Path(folder)/'sdk.avi'
+            camera.start_recording(video)
+            try:
+                before=time.monotonic_ns();sdk.feed(987)
+                image=camera.read(.5);after=time.monotonic_ns()
+            finally:
+                self.make_video(video,1)
+                camera.stop_recording()
+            paths=sidecar_paths(video)
+            row=rows(paths['timestamps'])[0]
             self.assertEqual(int(row['device_timestamp_raw']),(2<<32)|42)
             self.assertEqual(int(row['sdk_frame_number']),987)
             self.assertEqual(int(row['sdk_host_timestamp_raw']),123)
             self.assertTrue(before<=int(row['host_receive_monotonic_ns'])<=after)
             self.assertEqual(image.shape,(4,4,3))
-            metadata=json.loads(camera.recording_journal.paths['manifest'].read_text())
+            metadata=json.loads(paths['manifest'].read_text())
             self.assertEqual(metadata['device_timestamp_unit'],'unknown_raw_ticks')
 
     def test_missing_avi_is_not_reported_as_saved(self):

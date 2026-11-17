@@ -20,7 +20,8 @@ class OpenLoopJournal:
             physical_transport_verified=False, physical_isolation_verified=False,
             timestamp_domain='host_monotonic_not_camera_exposure',
             settings=settings, routes={k:list(v) for k,v in plan.routes.items()},
-            hold_ids=sorted(plan.hold_ids), global_frames=plan.length,
+            hold_ids=sorted(plan.hold_ids), startup_clear_ids=sorted(plan.startup_clear_ids),
+            global_frames=plan.length,
             status='running', completion_means='command_sequence_only_not_droplet_arrival')
         files=[Path(__file__),Path(__file__).with_name('open_loop_sequence.py'),
                Path(__file__).with_name('open_loop_controller.py'),

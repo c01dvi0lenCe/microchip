@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import json
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -24,6 +25,19 @@ from dmf.vision.config import load_yaml
 from dmf.vision.image_io import write_image
 
 CAMERA_MEDIA_ROOT = Path(r"D:\I\ZJU\有源矩阵\视觉-工业相机")
+
+
+def recording_continuity_message(video):
+    """Read only the small finalized manifest, never decode on the Tk thread."""
+    try:
+        info = json.loads(Path(video).with_suffix('.recording.json').read_text(encoding='utf-8'))
+        audit = info['continuity']
+        status = {'continuous': '首末实收帧之间未发现缺号',
+                  'gaps_observed': '存在跳帧，详见同目录 .gaps.csv'}.get(audit['status'], '连续性未核实')
+        return (f"录像：实收 {audit['captured_frames']}，已写 {info['recorded_frames']}；"
+                f"取帧时已缺 {audit['sdk_missing_between_received']}，本机未写 {audit['local_dropped_frames']}。{status}")
+    except (OSError, ValueError, TypeError, KeyError):
+        return '录像连续性未核实；请保留同目录时间表和录像清单。'
 
 
 class CameraControllerMixin:
@@ -161,6 +175,7 @@ class CameraControllerMixin:
             self.log("请先在实物模式开启工业相机预览，再开始录像")
             return
         path = self._camera_recording_output_path()
+        if hasattr(self,'_begin_linked_recording') and self._begin_linked_recording(path):return
         self._submit_camera_recording_command("start_recording", path)
 
     @staticmethod
@@ -209,12 +224,15 @@ class CameraControllerMixin:
             self.btn_camera_photo.config(state="normal")
 
     def _request_camera_recording_stop(self):
+        if hasattr(self,'_recording_vision_stopping'):self._recording_vision_stopping()
         self._submit_camera_recording_command("stop_recording")
 
     def _submit_camera_recording_command(self, method, *args):
         source = getattr(self, "_hardware_camera_source", None)
         if source is None:
             self.log("相机未连接，无法操作录像")
+            if hasattr(self,'_recording_vision_finished'):
+                self._recording_vision_finished(None,error=f'{method}_failed: camera source missing')
             return
         self.btn_camera_record.config(state="disabled")
         future = source.submit_camera_command(method, *args)
@@ -234,6 +252,8 @@ class CameraControllerMixin:
             if self.camera_running:
                 self.btn_camera_record.config(text="开始录像", state="normal")
             self.log(f"相机录像操作失败：{exc}")
+            if hasattr(self,'_recording_vision_finished'):
+                self._recording_vision_finished(None,error=f'{method}_failed: {exc}')
             return
         if method == "start_recording":
             if not self.camera_running:
@@ -245,6 +265,7 @@ class CameraControllerMixin:
             self._update_camera_recording_timer()
             self.btn_camera_record.config(text="停止录像", state="normal")
             self.log(f"开始录像：{path}")
+            if hasattr(self,'_recording_vision_started'):self._recording_vision_started(path)
         else:
             self.camera_recording = False
             if self.camera_recording_started_at is not None:
@@ -257,7 +278,9 @@ class CameraControllerMixin:
             if self.camera_running:
                 self.btn_camera_record.config(text="开始录像", state="normal")
             self.log(f"录像已保存：{path}")
+            self.log(recording_continuity_message(path))
             self.log("逐帧时间、电极命令/ACK及帧状态对照已保存到录像同目录")
+            if hasattr(self,'_recording_vision_finished'):self._recording_vision_finished(path)
 
     @staticmethod
     def _format_recording_duration(seconds):
@@ -319,6 +342,7 @@ class CameraControllerMixin:
             self.camera_after_id = self.root.after(40, self._poll_hardware_camera)
 
     def _hardware_camera_failed(self, error):
+        if hasattr(self,'_abort_recording_vision'):self._abort_recording_vision(f'camera_failed: {error}')
         if hasattr(self,'stop_realtime_detection'):self.stop_realtime_detection()
         self._latest_camera_packet=None
         self.camera_running = False
@@ -343,6 +367,7 @@ class CameraControllerMixin:
         self.log(f"MVS 相机采集失败：{error}")
 
     def stop_camera(self):
+        if hasattr(self,'_abort_recording_vision'):self._abort_recording_vision('camera_closed')
         if hasattr(self,'stop_realtime_detection'):self.stop_realtime_detection()
         self._latest_camera_packet=None
         if self.auto_running:

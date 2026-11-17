@@ -7,17 +7,18 @@ import os
 from pathlib import Path
 import sys
 import ctypes
-import time
 from threading import Lock
-from pathlib import Path
 
 import cv2
 import numpy as np
 from dmf.recording import RecordingJournal, sidecar_paths, clock_stamp
+from .mvs_recording import RawFrame, RecordingPump
 
 
 _sdk_lock = Lock()
 _sdk_initialized = False
+# MV_E_NODATA and MV_E_GC_TIMEOUT in Hikrobot's MvErrorDefine header.
+_SDK_WAIT_RESULTS = {0x80000007, 0x80000107}
 
 
 def _load_sdk(parameters):
@@ -78,6 +79,9 @@ def convert_mvs_buffer(width, height, pixel_type, buffer, pixels):
 
 
 class MvsCamera:
+    recording_byte_limit = 128 * 1024 * 1024
+    recording_frame_limit = 8
+
     def __init__(self, parameters):
         global _sdk_initialized
         self.camera = None
@@ -135,44 +139,76 @@ class MvsCamera:
         self.handle_created = True
         self._check(self.camera.MV_CC_OpenDevice(self.params.MV_ACCESS_Exclusive, 0), "open device")
         self.device_open = True
-        self._check(
-            self.camera.MV_CC_SetGrabStrategy(self.headers.MV_GrabStrategy_LatestImagesOnly),
-            "set latest-frame strategy",
-        )
+        self._set_preview_strategy()
         self._check(self.camera.MV_CC_StartGrabbing(), "start acquisition")
         self.started = True
 
     def read(self, timeout_s):
         if self.closed or not self.started:
             raise RuntimeError("MVS camera is closed")
+        if self.recording:
+            frame = self._pump.preview(timeout_s)
+        else:
+            if getattr(self, '_preview_error', ''):
+                raise RuntimeError(self._preview_error)
+            frame = self._grab_raw(timeout_s)
+        info = frame.metadata
+        image = convert_mvs_buffer(info['width'], info['height'], info['pixel_type'],
+                                   frame.pixels, self.pixels)
+        # read() owns this public value: SDK capture can be several frames ahead.
+        self.last_frame_metadata = dict(info)
+        return image
+
+    def _clear_sdk_backlog(self):
+        self._check(self.camera.MV_CC_ClearImageBuffer(), "clear stale SDK image buffers")
+
+    def _set_preview_strategy(self):
+        try:
+            self._check(self.camera.MV_CC_SetGrabStrategy(self.headers.MV_GrabStrategy_LatestImagesOnly),
+                        "set latest preview strategy")
+        except Exception as exc:
+            self._preview_error = str(exc)
+            raise
+        self._preview_error = ''
+
+    def _grab_raw(self, timeout_s, journal=None):
         frame = self.headers.MV_FRAME_OUT()
         code = self.camera.MV_CC_GetImageBuffer(frame, max(1, int(float(timeout_s) * 1000)))
-        if code != 0:
+        if int(code) & 0xffffffff in _SDK_WAIT_RESULTS:
             raise TimeoutError(f"MVS did not deliver a frame before timeout (0x{code:08x})")
-        received = clock_stamp()
+        self._check(int(code) & 0xffffffff, "acquire image buffer")
+        metadata = None
+        loss = 'raw_copy_failed'
         try:
-            info = frame.stFrameInfo
-            ticks = ((int(info.nDevTimeStampHigh) << 32) | int(info.nDevTimeStampLow)
-                     if hasattr(info, 'nDevTimeStampHigh') else '')
-            self.last_frame_metadata = dict(
-                sdk_frame_number=getattr(info, 'nFrameNum', ''), device_timestamp_raw=ticks,
-                sdk_host_timestamp_raw=getattr(info, 'nHostTimeStamp', ''),
-                host_receive_monotonic_ns=received['host_monotonic_ns'],
-                host_receive_perf_counter_ns=received['host_perf_counter_ns'],
-                host_utc_ns=received['host_utc_ns'], timestamp_source='host_receive_perf_counter',
-                width=info.nWidth, height=info.nHeight, pixel_type=int(info.enPixelType))
-            if self.recording:
-                self._input_record_frame(frame)
-                self.recording_journal.add_frame(dict(self.last_frame_metadata,
-                    input_completed_monotonic_ns=time.monotonic_ns()))
-            raw = ctypes.string_at(frame.pBufAddr, info.nFrameLen)
-            return convert_mvs_buffer(info.nWidth, info.nHeight, info.enPixelType, raw, self.pixels)
-        except Exception as exc:
-            if self.recording:
-                self.recording_journal.log.error = str(exc)
+            try:
+                received = clock_stamp()
+                info = frame.stFrameInfo
+                ticks = ((int(info.nDevTimeStampHigh) << 32) | int(info.nDevTimeStampLow)
+                         if hasattr(info, 'nDevTimeStampHigh') else '')
+                metadata = dict(
+                    sdk_frame_number=getattr(info, 'nFrameNum', ''), device_timestamp_raw=ticks,
+                    sdk_host_timestamp_raw=getattr(info, 'nHostTimeStamp', ''),
+                    host_receive_monotonic_ns=received['host_monotonic_ns'],
+                    host_receive_perf_counter_ns=received['host_perf_counter_ns'],
+                    host_utc_ns=received['host_utc_ns'], timestamp_source='host_receive_perf_counter',
+                    width=info.nWidth, height=info.nHeight, pixel_type=int(info.enPixelType))
+                if not frame.pBufAddr or info.nFrameLen <= 0:
+                    raise ValueError("MVS returned an empty SDK image buffer")
+                raw = ctypes.string_at(frame.pBufAddr, info.nFrameLen)
+                result = RawFrame(raw, metadata, getattr(info, 'nExtendWidth', 0) or info.nWidth,
+                                  getattr(info, 'nExtendHeight', 0) or info.nHeight)
+                loss = 'sdk_buffer_release_failed'
+            finally:
+                # No journal I/O, encoder or BGR conversion with an SDK buffer.
+                self._check(self.camera.MV_CC_FreeImageBuffer(frame), "release image buffer")
+        except Exception:
+            if metadata is not None and journal is not None:
+                journal.observe_capture(metadata)
+                journal.record_loss(metadata, loss)
             raise
-        finally:
-            self._check(self.camera.MV_CC_FreeImageBuffer(frame), "release image buffer")
+        if journal is not None:
+            journal.observe_capture(metadata)
+        return result
 
     def start_recording(self, path):
         if self.recording:
@@ -203,11 +239,35 @@ class MvsCamera:
         record.enRecordFmtType = self.headers.MV_FormatType_AVI
         record.strFilePath = str(output).encode("utf-8")
         journal = RecordingJournal(output, frame_rate, getattr(self, 'electrode_stream', None))
+        pump = RecordingPump(self._grab_raw, self._input_record_frame, journal,
+                             self.recording_byte_limit, self.recording_frame_limit)
+        encoder_started = sequential = False
         try:
+            self._check(self.camera.MV_CC_SetGrabStrategy(self.headers.MV_GrabStrategy_OneByOne),
+                        "set sequential recording strategy")
+            sequential = True
             self._check(self.camera.MV_CC_StartRecord(record), "start recording")
+            encoder_started = True
+            # Linearization point: frames buffered before the recorder was ready
+            # are not attributed to it. No parallel Get or unreleased SDK pointer.
+            self._clear_sdk_backlog()
+            pump.start()
         except Exception as exc:
-            journal.close(str(exc))
+            error = str(exc)
+            pump.finish()
+            if encoder_started:
+                try:
+                    self._check(self.camera.MV_CC_StopRecord(), "stop recording")
+                except Exception as stop_error:
+                    error += f'; {stop_error}'
+            if sequential:
+                try:
+                    self._set_preview_strategy()
+                except Exception as restore_error:
+                    error += f'; {restore_error}'
+            journal.close(error)
             raise
+        self._pump = pump
         self.recording_journal = journal
         self.last_recording_error = ''
         self.recording = True
@@ -233,27 +293,29 @@ class MvsCamera:
         return rate
 
     def _input_record_frame(self, frame):
-        info = frame.stFrameInfo
         frame_info = self.headers.MV_CC_INPUT_FRAME_INFO_EX()
-        frame_info.enPixelType = info.enPixelType
-        frame_info.nWidth = info.nExtendWidth or info.nWidth
-        frame_info.nHeight = info.nExtendHeight or info.nHeight
-        frame_info.pData = ctypes.cast(frame.pBufAddr, ctypes.POINTER(ctypes.c_ubyte))
-        frame_info.nDataLen = info.nFrameLen
+        frame_info.enPixelType = frame.metadata['pixel_type']
+        frame_info.nWidth = frame.encode_width
+        frame_info.nHeight = frame.encode_height
+        # ctypes casts the owned bytes without another full-frame allocation;
+        # frame remains alive until this synchronous SDK input call returns.
+        frame_info.pData = ctypes.cast(frame.pixels, ctypes.POINTER(ctypes.c_ubyte))
+        frame_info.nDataLen = len(frame.pixels)
         self._check(self.camera.MV_CC_InputOneFrameEx(frame_info), "write recording frame")
 
     def stop_recording(self):
         if not self.recording:
             return None
         path = self.recording_path
-        error = ''
+        error = self._pump.finish()
         try:
             self._check(self.camera.MV_CC_StopRecord(), "stop recording")
         except Exception as exc:
-            error = str(exc)
+            error = '; '.join(filter(None, (error, str(exc))))
         finally:
             self.recording = False
             self.recording_path = None
+            self._pump = None
             try:
                 self.recording_journal.close(error)
             except Exception as exc:
@@ -261,6 +323,14 @@ class MvsCamera:
                 raise
             finally:
                 self.recording_journal = None
+                if not getattr(self, 'closed', False):
+                    # Never reconfigure a strategy while a Get or encoder write
+                    # is active. A restore failure is a preview fault, not AVI damage.
+                    try:
+                        self._set_preview_strategy()
+                    except Exception:
+                        if not self.last_recording_error:
+                            raise
         return str(path)
 
     def close(self):

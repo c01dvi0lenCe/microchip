@@ -1,3 +1,4 @@
+-c requirements-vision-win-py314.constraints.txt
 -r requirements.txt
 numpy==2.4.4
 opencv-python==4.13.0.92

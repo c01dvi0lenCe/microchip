@@ -9,6 +9,8 @@ import queue
 import threading
 import time
 
+from dmf.capture_continuity import CAPTURE_FIELDS, GAP_FIELDS, CaptureContinuity
+
 FRAME_FIELDS = ('video_frame_index', 'sdk_frame_number', 'device_timestamp_raw',
     'sdk_host_timestamp_raw', 'host_receive_monotonic_ns', 'host_receive_perf_counter_ns', 'host_utc_ns',
     'host_time_utc', 'host_time_local', 'receive_relative_s',
@@ -34,7 +36,8 @@ def sidecar_paths(video):
     path = Path(video)
     return {name: path.with_suffix(suffix) for name, suffix in (
         ('timestamps', '.timestamps.csv'), ('electrodes', '.electrodes.csv'),
-        ('manifest', '.recording.json'), ('alignment', '.frame_electrodes.csv'))}
+        ('manifest', '.recording.json'), ('alignment', '.frame_electrodes.csv'),
+        ('capture', '.capture.csv'), ('gaps', '.gaps.csv'))}
 
 
 class AsyncCsvLog:
@@ -214,7 +217,10 @@ class RecordingJournal:
         self.stream = stream
         self.log = AsyncCsvLog({
             'frames': (self.paths['timestamps'], FRAME_FIELDS),
+            'capture': (self.paths['capture'], CAPTURE_FIELDS),
+            'gaps': (self.paths['gaps'], GAP_FIELDS),
             'events': (self.paths['electrodes'], EVENT_FIELDS)})
+        self.continuity = CaptureContinuity(self.log)
         self.frame_count = 0
         self.closed = False
         self.first_ns = self.last_ns = None
@@ -234,7 +240,8 @@ class RecordingJournal:
 
     def _manifest(self, status, error, encoded_count=None):
         duration = (self.last_ns - self.first_ns) / 1e9 if self.frame_count > 1 else 0
-        payload = dict(schema_version=1, video=str(self.video), status=status, error=error,
+        payload = dict(schema_version=2, video=str(self.video), status=status, error=error,
+            continuity=self.continuity.summary(status == 'complete'),
             recorded_frames=self.frame_count, written_timestamp_rows=self.log.counts['frames'],
             encoded_frame_count=encoded_count, nominal_playback_fps=self.nominal_fps,
             host_receive_duration_s=duration,
@@ -247,6 +254,15 @@ class RecordingJournal:
             timing_note='PC buffer receive time, not sensor exposure time; APPLIED is electrical acknowledgement, not droplet arrival.',
             files={key: str(value) for key, value in self.paths.items()})
         self.paths['manifest'].write_text(json.dumps(payload, indent=2), encoding='utf-8')
+
+    def observe_capture(self, metadata):
+        self.continuity.receive(metadata)
+
+    def record_loss(self, metadata, reason):
+        self.continuity.loss(metadata, reason)
+
+    def record_preview_replacement(self):
+        self.continuity.preview_replacement()
 
     def add_frame(self, metadata):
         if self.log.error:
@@ -272,6 +288,9 @@ class RecordingJournal:
             self.stream.unsubscribe(self.callback)
         self.log.close()
         error = error or self.log.error
+        error = error or self.continuity.accounting_error(self.frame_count)
+        if self.log.counts['frames'] != self.frame_count:
+            error = error or 'AVI timestamp row count mismatch'
         count = None
         if self.video.is_file():
             import cv2

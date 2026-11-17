@@ -17,9 +17,10 @@ from dmf.vision.whole_chip import WholeChipDetector
 from dmf.vision.priority_vision import PriorityVisionDetector
 from dmf.vision.task_regions import TaskRegion
 from .dual_vision_display import DualVisionDisplayMixin
+from .recording_vision import RecordingVisionMixin
 
 
-class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
+class RealtimeVisionControllerMixin(RecordingVisionMixin,DualVisionDisplayMixin):
     def _init_realtime_vision(self):
         repo=Path(__file__).resolve().parents[1]
         # This G4 package failed the 120-ROI batch audit. Preserve the audited
@@ -58,6 +59,7 @@ class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
         self._vision_snapshot_path=None;self._vision_previous_end=None;self._vision_fps=0.
         self._hardware_preview_overwrites=0
         self._init_dual_vision()
+        self._init_recording_vision()
 
     def _build_realtime_vision_controls(self,parent):
         self._build_dual_vision_controls(parent)
@@ -76,6 +78,8 @@ class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
         view.pack(side='left',padx=4);view.bind('<<ComboboxSelected>>',lambda _:self._vision_view_changed())
         self.btn_vision_save=tk.Button(tools,text='保存结果',command=self.save_vision_result,state='disabled')
         self.btn_vision_save.pack(side='left',padx=3)
+        tk.Checkbutton(tools,text='录像联动检测',variable=self.recording_vision_var,
+                       bg=self.colors['panel']).pack(side='left',padx=3)
         tk.Label(parent,textvariable=self.vision_status_var,bg=self.colors['panel'],fg=self.colors['muted'],
                  anchor='w',justify='left',wraplength=550).pack(fill='x',padx=8,pady=(0,3))
         if self._vision_config_error:self.vision_status_var.set('视觉配置错误：'+self._vision_config_error)
@@ -91,8 +95,11 @@ class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
         try:local.write_text(yaml.safe_dump(dict(model_package=folder),allow_unicode=True),encoding='utf-8')
         except OSError as exc:self.vision_status_var.set(f'模型路径已选择，本地配置未保存：{exc}')
 
-    def start_realtime_detection(self):
+    def start_realtime_detection(self,save_masks=False):
         if not self._operator_only or self._experiment_active or self._vision_detector is not None:return False
+        session=getattr(self,'_recording_vision',None)
+        if session is not None and session['data']['status']=='recording':
+            self.vision_status_var.set('本段检测已停止，请结束录像后再重新启动');return False
         if not self.camera_running or self._latest_camera_packet is None:
             self.vision_status_var.set('请先开启相机预览并等待真实画面');return False
         if self._vision_config_error:
@@ -117,7 +124,7 @@ class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
                     max_inspection_age_s=self._vision_settings.get('max_inspection_age_s',1.),
                     inspection_period_s=self._vision_settings.get('inspection_period_s',1.),clock_policy='live')
                 self._update_vision_region_choices()
-            else:self._vision_detector=WholeChipDetector(factory,output,self._vision_roi)
+            else:self._vision_detector=WholeChipDetector(factory,output,self._vision_roi,save_masks=save_masks)
         except Exception as exc:
             self.vision_status_var.set(f'检测未启动：{exc}');return False
         self._vision_selecting=False;self._vision_select_start=None
@@ -184,6 +191,10 @@ class RealtimeVisionControllerMixin(DualVisionDisplayMixin):
             self._vision_poll_id=self.root.after(50,self._poll_realtime_vision)
 
     def stop_realtime_detection(self):
+        session=getattr(self,'_recording_vision',None)
+        if session is not None and session['data']['status']=='recording':
+            session['data']['errors'].append('detection_manually_stopped_during_recording')
+            self._write_recording_vision(session)
         self._vision_selecting=False;self._vision_select_start=None
         self._vision_accepting=False;self._vision_latest_result=None;self.vision_view_var.set('原图')
         self._vision_region_results.clear()

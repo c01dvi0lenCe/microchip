@@ -21,7 +21,7 @@ python main.py
 
 ## 架构
 
-整芯片U-Net检测及另一台电脑的安装方法见[检测部署说明](docs/whole-chip-realtime-vision.md)。默认`main.py`是纯实物操控界面，仿真使用独立研究入口。检测当前仅作显示与记录，不接管电极切换。
+**相机电脑第一次安装或更新：**见[代码、模型下载与无硬件自检](docs/camera-pc-quickstart.md)。已安装的电脑先核对分支，不要覆盖本地 SDK 配置。随后按[30 秒空载录像验收](docs/camera-recording-30s.md)验证实际取帧。默认`main.py`是纯实物操控界面；U-Net 只显示和记录，不自动切换电极。[完整检测部署说明](docs/whole-chip-realtime-vision.md)
 
 - `main.py`：Tkinter 程序入口。
 - `app_controller.py`：上位机装配入口，仅保留公共类、领域常量和初始化状态。

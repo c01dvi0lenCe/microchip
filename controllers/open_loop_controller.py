@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from dmf.layout import cell_from_electrode_id, electrode_id, is_core_cell
-from .open_loop_sequence import (FourCellTask, TimedPlanSequence, compile_four_cell_tasks,
+from .open_loop_sequence import (FourCellTask, StartupClear, TimedPlanSequence, compile_four_cell_tasks,
                                  compile_routes, four_cell_missing_fields)
 from .open_loop_journal import OpenLoopJournal
 
@@ -166,6 +166,14 @@ class OpenLoopControllerMixin:
             self.open_loop_status_var.set('运行期间不能重新编译任务');return None
         try:
             cycles=self.open_loop_cycles_var.get()
+            if self.is_simulation_mode():
+                active=self._active_electrode_ids()
+            else:
+                with self.electrode_event_stream.lock:
+                    # A disconnected operator may still preview geometry; never
+                    # substitute button colors for an acknowledged real state.
+                    active=(frozenset(self.electrode_event_stream.active)
+                            if self.electrode_event_stream.known else None)
             if self.open_loop_kind_var.get()=='多组四宫格':
                 tasks=[FourCellTask(g['group_id'],g['start'],tuple(g['ring']),g['target']) for g in self.open_loop_groups]
                 missing=four_cell_missing_fields(tasks)
@@ -174,9 +182,7 @@ class OpenLoopControllerMixin:
                     self._refresh_open_loop_groups()
                     self.open_loop_tree.see(self._open_loop_selected)
                     raise ValueError('；'.join(f'{group}未设置'+ '、'.join(fields) for group,fields in missing.items()))
-                starts={g['start'] for g in self.open_loop_groups}
-                holds=self._active_electrode_ids()-starts
-                plan=compile_four_cell_tasks(tasks,cycles,hold_ids=holds)
+                plan=compile_four_cell_tasks(tasks,cycles,initial_active_ids=active or ())
             else:
                 if self.operation_var.get()!=self.OP_MOVE:raise ValueError('规划移动路径入口仅执行“移动”；四宫格请选择多组入口')
                 missing=[name for name,cell in (('起点',self.start_cell),('终点',self.goal_cell)) if cell is None]
@@ -186,15 +192,28 @@ class OpenLoopControllerMixin:
                     path=self.planner.plan(self.start_cell,self.goal_cell,self._routing_obstacles(self.start_cell,self.goal_cell))
                 if not path:raise ValueError('尚无可执行路径')
                 ids=tuple(electrode_id(*cell,self.cols) for cell in path)
-                plan=compile_routes({'移动':ids},hold_ids=self._active_electrode_ids()-{ids[0]})
+                plan=compile_routes({'移动':ids},initial_active_ids=active or ())
             # Validate dwell now, before creating any journal or controlling outputs.
             TimedPlanSequence(plan,self.open_loop_dwell_var.get())
         except (ValueError,TypeError,tk.TclError) as exc:
             self._open_loop_plan=None;self.open_loop_status_var.set(f'预检拒绝：{exc}')
             self.log(f'开环预检拒绝：{exc}');return None
         self._open_loop_plan=plan;self._open_loop_preview=True
-        self.open_loop_status_var.set(f'预检通过：{len(plan.routes)}组／{plan.length-1}同步步；额外保持{sorted(plan.hold_ids)}；不证明实际到达')
+        state=(f'启动待关{sorted(plan.startup_clear_ids)}；额外保持{sorted(plan.hold_ids)}'
+               if active is not None else '仅检查路径；电极状态未确认，不能启动')
+        self.open_loop_status_var.set(f'预检通过：{len(plan.routes)}组／{plan.length-1}同步步；{state}；不证明实际到达')
         self._draw_matrix_canvas();return plan
+
+    def _open_loop_state_rejection(self, expected=None):
+        real=not self.is_simulation_mode()
+        with self.electrode_event_stream.lock:
+            if real and not self.electrode_event_stream.known:
+                return '完整电极状态未知，请重新同步ALL_OFF'
+            if self.electrode_event_stream.pending:
+                return '已有在途电极事务'
+            if real and expected is not None and self.electrode_event_stream.active != expected:
+                return '已确认电极状态已改变，请重新预检'
+        return ''
 
     def start_open_loop(self,manual=None):
         if (self._timed_mix_owned or self.auto_running or self._experiment_active
@@ -202,14 +221,15 @@ class OpenLoopControllerMixin:
             self.open_loop_status_var.set('启动拒绝：已有任务占用或硬件状态不明');return False
         if not self.is_simulation_mode() and not self.is_connected:
             self.open_loop_status_var.set('启动拒绝：串口未连接');return False
-        with self.electrode_event_stream.lock:
-            if not self.is_simulation_mode() and not self.electrode_event_stream.known:
-                self.open_loop_status_var.set('启动拒绝：完整电极状态未知，请重新同步ALL_OFF')
-                return False
-            if self.electrode_event_stream.pending:
-                self.open_loop_status_var.set('启动拒绝：已有在途电极事务');return False
+        reason=self._open_loop_state_rejection()
+        if reason:
+            self.open_loop_status_var.set(f'启动拒绝：{reason}');return False
         plan=self.precheck_open_loop()
         if plan is None:return False
+        initial=plan.hold_ids | plan.startup_clear_ids
+        reason=self._open_loop_state_rejection(initial)
+        if reason:
+            self.open_loop_status_var.set(f'启动拒绝：{reason}');return False
         manual=self.open_loop_advance_var.get()=='人工单步' if manual is None else bool(manual)
         seq=TimedPlanSequence(plan,self.open_loop_dwell_var.get(),manual=manual)
         settings=dict(kind=self.open_loop_kind_var.get(),dwell_s=seq.dwell_s,manual=manual,
@@ -226,6 +246,11 @@ class OpenLoopControllerMixin:
         self._init_open_loop_manual(plan)
         self._timed_mix_step_requested=False
         self._timed_mix_release_requested=False;self._timed_mix_disconnect_requested=False
+        if not self.is_simulation_mode():
+            # Normalize the view used by the shared manual/delta worker to the
+            # frozen, confirmed baseline, without sending any electrode output.
+            for eid in self._active_electrode_ids() ^ initial:
+                self.update_ui_only(eid,eid in initial)
         self.log(f'定时开环启动：{len(plan.routes)}组，共{plan.length-1}同步步；相机仅预览录像，不判定到达')
         self._timed_mix_tick();return True
 
@@ -244,6 +269,9 @@ class OpenLoopControllerMixin:
         self._timed_mix_tick();return True
 
     def _open_loop_on_request(self,target):
+        if isinstance(target,StartupClear):
+            self.open_loop_status_var.set(f'启动准备：关闭路径电极{sorted(target.ids)}，等待确认')
+            return
         phase=self._timed_mix.index
         self._open_loop_journal.step('request',phase,self._open_loop_composed_targets(phase),self._open_loop_plan.positions_at(phase))
 
