@@ -14,6 +14,8 @@ STM32 固件是独立仓库：`https://github.com/c01dvi0lenCe/DropLet-code`。�
 
 ## 运行
 
+**相机电脑本次要录两段视频：先看[逐步操作卡与交回文件清单](docs/camera-pc-two-recordings.md)。** 文末包含可直接交给另一台电脑 Chat 的接手任务。
+
 ```powershell
 python -m pip install -r requirements.txt
 python main.py
